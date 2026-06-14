@@ -1,0 +1,33 @@
+name: Conformance
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  plugin-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # eve is not published to PyPI yet — clone the repo for its conformance
+      # harness + schema. Once eve ships, replace this step with `pip install eve`
+      # and the run below with `eve plugin test local-qemu`.
+      - uses: actions/checkout@v4
+        with:
+          repository: fruwehq/eve
+          path: eve
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install jsonschema pyyaml
+
+      # local-qemu is the standalone provider plugin in this repo.
+      # _common and _terraform-common are shared dispatchers referenced by
+      # providers via relative `../_common/...` exec paths; they have no
+      # eve-plugin.yaml of their own and are not run through the harness.
+      - run: eve/scripts/plugin-test local-qemu
