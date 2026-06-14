@@ -14,7 +14,7 @@ cd "$(git rev-parse --show-toplevel)"
 # shellcheck source=plugins/providers/_common/lib/profile-env.sh
 . "$(cd "$(dirname "$0")/../.." && pwd)/_common/lib/profile-env.sh"
 # shellcheck source=plugins/providers/raspberry-pi/lib/host-resolver.sh
-. ./plugins/providers/raspberry-pi/lib/host-resolver.sh
+. "$(cd "$(dirname "$0")/../.." && pwd)/raspberry-pi/lib/host-resolver.sh"
 
 eve_load_profile_env "$PROFILE"
 
