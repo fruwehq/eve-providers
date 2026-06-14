@@ -14,7 +14,7 @@ jobs:
 
       # eve is not published to PyPI yet — clone the repo for its conformance
       # harness + schema. Once eve ships, replace this step with `pip install eve`
-      # and the run below with `eve plugin test local-qemu`.
+      # and the loop below with `eve plugin test <dir>` per provider.
       - uses: actions/checkout@v4
         with:
           repository: fruwehq/eve
@@ -26,8 +26,16 @@ jobs:
 
       - run: pip install jsonschema pyyaml
 
-      # local-qemu is the standalone provider plugin in this repo.
-      # _common and _terraform-common are shared dispatchers referenced by
-      # providers via relative `../_common/...` exec paths; they have no
-      # eve-plugin.yaml of their own and are not run through the harness.
-      - run: eve/scripts/plugin-test local-qemu
+      # Run the conformance harness against every provider plugin in this repo.
+      # Provider plugins live one level below the repo root (local-qemu, aws, gcp,
+      # vultr, truenas, raspberry-pi) and each carry an eve-plugin.yaml. The
+      # shared dispatchers _common and _terraform-common have no eve-plugin.yaml of
+      # their own (referenced by providers via relative `../_common/...` exec
+      # paths) and are skipped by the `-f .../eve-plugin.yaml` guard.
+      - name: plugin-test all providers
+        run: |
+          for d in */; do
+            d="${d%/}"
+            [ -f "$d/eve-plugin.yaml" ] || continue
+            eve/scripts/plugin-test "$d"
+          done
