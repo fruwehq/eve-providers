@@ -22,9 +22,9 @@ cd "$(git rev-parse --show-toplevel)"
 # shellcheck source=scripts/lib/instance-workdir.sh
 . ./scripts/lib/instance-workdir.sh
 # shellcheck source=plugins/providers/_common/lib/profile-env.sh
-. ./plugins/providers/_common/lib/profile-env.sh
+. "$(cd "$(dirname "$0")/../.." && pwd)/_common/lib/profile-env.sh"
 # shellcheck source=plugins/providers/_common/lib/ssh-helpers.sh
-. ./plugins/providers/_common/lib/ssh-helpers.sh
+. "$(cd "$(dirname "$0")/../.." && pwd)/_common/lib/ssh-helpers.sh"
 
 eve_load_profile_env "$PROFILE"
 ./scripts/env-require VM_USER_NAME
