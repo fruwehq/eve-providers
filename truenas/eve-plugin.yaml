@@ -40,28 +40,36 @@ config_schema:
   config:
     api_user:
       type: string
+      env_var: TRUENAS_API_USER
       description: "TrueNAS API username associated with the API key."
     host:
       type: host
       required: true
+      env_var: TRUENAS_HOST
       description: "TrueNAS host used for SSH/API access."
     ssh_host_key_fingerprint:
       type: string
+      env_var: TRUENAS_SSH_HOST_KEY_FINGERPRINT
       description: "Expected TrueNAS SSH host key fingerprint for verification."
     ssh_port:
       type: integer
+      env_var: TRUENAS_SSH_PORT
       description: "TrueNAS SSH port."
     ssh_user:
       type: string
+      env_var: TRUENAS_SSH_USER
       description: "TrueNAS SSH username."
     vm_base_dir:
       type: path
+      env_var: TRUENAS_VM_BASE_DIR
       description: "Base directory for VM files on the TrueNAS host."
     vm_pool:
       type: string
+      env_var: TRUENAS_VM_POOL
       description: "ZFS pool for VM zvols."
     vm_zvol_prefix:
       type: string
+      env_var: TRUENAS_VM_ZVOL_PREFIX
       description: "ZFS dataset path prefix for VM zvols below vm_pool."
   secrets:
     api_key:
@@ -70,6 +78,7 @@ config_schema:
     ssh_private_key_file:
       type: path
       required: true
+      env_var: TRUENAS_SSH_PRIVATE_KEY_FILE
       description: "Private key used for SSH to TrueNAS."
 supports:
   engines: [terraform]
