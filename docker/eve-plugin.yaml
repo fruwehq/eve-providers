@@ -1,0 +1,62 @@
+api_version: eve.plugin/v1
+kind: provider
+id: docker
+display_name: Docker
+commands:
+  resolve: {exec: commands/provider-command, args: [resolve]}
+  init: {exec: commands/docker, args: [init]}
+  plan: {exec: commands/docker, args: [plan]}
+  up: {exec: commands/docker, args: [up]}
+  down: {exec: commands/docker, args: [down]}
+  start: {exec: commands/docker, args: [start]}
+  stop: {exec: commands/docker, args: [stop]}
+  status: {exec: commands/docker, args: [status]}
+  ip: {exec: commands/docker, args: [ip]}
+  ssh: {exec: commands/docker, args: [exec]}
+  validate: {exec: ../_common/commands/validate-os, args: [all, docker image, docker_image]}
+actions:
+  - id: status-details
+    label: Status
+    target: provider.status
+  - id: plan
+    label: Plan
+    target: provider.plan
+  - id: init
+    label: Init
+    target: provider.init
+access:
+  ubuntu:
+    bootstrap_user: {value: root}
+    provision_user: {value: root}
+    human_user: {value: root}
+capabilities: [host-ssh]
+host_tools:
+  - name: docker
+    check: docker --version
+    brew: brew install --cask docker
+    apt: apt install docker.io
+env_emission:
+  - name: CLOUD_IMAGE_URL
+    from: os.cloud_image_url
+    default: ""
+    match_provider: true
+supports:
+  engines: [docker]
+  kinds: [vm]
+env: []
+catalog:
+  machines:
+    - name: docker-ubuntu-medium
+      provider: docker
+      kind: vm
+      supports:
+        arches: [amd64, arm64]
+      defaults:
+        cpu_cores: 2
+        memory_mb: 4096
+        disk_gb: 20
+  oses:
+    - id: ubuntu-26.04-amd64
+      docker_image: ubuntu:26.04
+    - id: ubuntu-26.04-arm64
+      docker_image: ubuntu:26.04
