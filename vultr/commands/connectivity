@@ -1,0 +1,28 @@
+#!/usr/bin/env python3
+"""Vultr connectivity probe for providers-status."""
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+
+_DEVNULL = subprocess.DEVNULL
+
+
+def main() -> None:
+    api_key = os.environ.get("VULTR_API_KEY", "")
+    if not api_key:
+        print(json.dumps({"configured": "no", "reachable": "no", "notes": "missing VULTR_API_KEY"}))
+        return
+    if subprocess.run(
+        ["curl", "-fsS", "-H", f"Authorization: Bearer {api_key}",
+         "https://api.vultr.com/v2/account"],
+        stdout=_DEVNULL, stderr=_DEVNULL, check=False,
+    ).returncode == 0:
+        print(json.dumps({"configured": "yes", "reachable": "yes", "notes": "api ok"}))
+    else:
+        print(json.dumps({"configured": "yes", "reachable": "no", "notes": "configured, but api call failed"}))
+
+
+if __name__ == "__main__":
+    main()

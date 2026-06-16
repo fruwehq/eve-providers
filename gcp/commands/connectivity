@@ -1,0 +1,54 @@
+#!/usr/bin/env python3
+"""GCP connectivity probe for providers-status."""
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import subprocess
+
+_DEVNULL = subprocess.DEVNULL
+
+
+def main() -> None:
+    notes = "missing GOOGLE_CLOUD_PROJECT/GOOGLE_PROJECT or gcloud config project"
+    project = os.environ.get("GOOGLE_CLOUD_PROJECT", "") or os.environ.get("GOOGLE_PROJECT", "")
+    if not project and shutil.which("gcloud"):
+        result = subprocess.run(
+            ["gcloud", "config", "get-value", "project"],
+            capture_output=True, text=True, check=False,
+        )
+        project = result.stdout.strip()
+
+    if not project:
+        print(json.dumps({"configured": "no", "reachable": "no", "notes": notes}))
+        return
+    configured = "yes"
+    if shutil.which("gcloud") is None:
+        print(json.dumps({"configured": configured, "reachable": "no", "notes": "configured, but gcloud not found"}))
+        return
+    if os.environ.get("GOOGLE_OAUTH_ACCESS_TOKEN", ""):
+        print(json.dumps({"configured": configured, "reachable": "yes",
+                          "notes": f"GOOGLE_OAUTH_ACCESS_TOKEN set; project={project}"}))
+        return
+    if subprocess.run(
+        ["gcloud", "auth", "application-default", "print-access-token"],
+        stdout=_DEVNULL, stderr=_DEVNULL, check=False,
+    ).returncode == 0:
+        print(json.dumps({"configured": configured, "reachable": "yes",
+                          "notes": f"gcloud application-default auth ok; project={project}"}))
+        return
+    if subprocess.run(
+        ["gcloud", "auth", "print-access-token"],
+        stdout=_DEVNULL, stderr=_DEVNULL, check=False,
+    ).returncode == 0:
+        print(json.dumps({"configured": configured, "reachable": "yes",
+                          "notes": f"gcloud user auth ok; project={project}; "
+                                   f"Terraform may need GOOGLE_OAUTH_ACCESS_TOKEN"}))
+        return
+    print(json.dumps({"configured": configured, "reachable": "no",
+                      "notes": f"configured, but gcloud auth failed; project={project}"}))
+
+
+if __name__ == "__main__":
+    main()

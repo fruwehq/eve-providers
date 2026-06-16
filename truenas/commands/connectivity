@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+"""TrueNAS connectivity probe for providers-status."""
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import tempfile
+from pathlib import Path
+
+_DEVNULL = subprocess.DEVNULL
+
+
+def main() -> None:
+    host = os.environ.get("TRUENAS_HOST", "")
+    port = os.environ.get("TRUENAS_SSH_PORT", "22")
+    user = os.environ.get("TRUENAS_SSH_USER", "")
+    key_file = os.environ.get("TRUENAS_SSH_PRIVATE_KEY_FILE", "")
+    configured = "no"
+    reachable = "no"
+    notes = "missing TRUENAS_HOST"
+
+    if not host:
+        print(json.dumps({"configured": configured, "reachable": reachable, "notes": notes}))
+        return
+
+    configured = "yes"
+    notes = f"host={host}"
+    if subprocess.run(
+        ["nc", "-z", "-w", "2", host, port], stdout=_DEVNULL, stderr=_DEVNULL, check=False,
+    ).returncode == 0:
+        reachable = "yes"
+        notes = f"ssh port {port} reachable"
+    else:
+        notes = f"ssh port {port} unreachable"
+
+    if user and key_file and Path(key_file).is_file():
+        tmp_dir = Path(tempfile.gettempdir())
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+        known_hosts = tmp_dir / "eve-truenas-known_hosts"
+        probe = subprocess.run(
+            ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5",
+             "-o", "StrictHostKeyChecking=accept-new",
+             "-o", f"UserKnownHostsFile={known_hosts}",
+             "-p", port, "-i", key_file, f"{user}@{host}",
+             "midclt call system.version >/dev/null 2>&1 && echo ok"],
+            capture_output=True, text=True, check=False,
+        )
+        if "ok" in probe.stdout:
+            reachable = "yes"
+            notes = "ssh auth ok; midclt reachable"
+        else:
+            notes = "host reachable; ssh auth or permissions failed"
+
+    api_key = os.environ.get("TRUENAS_API_KEY", "")
+    if api_key and subprocess.run(
+        ["curl", "-ksS", "--connect-timeout", "3", "--max-time", "8",
+         "-H", f"Authorization: Bearer {api_key}",
+         f"https://{host}/api/v2.0/system/version"],
+        stdout=_DEVNULL, stderr=_DEVNULL, check=False,
+    ).returncode == 0:
+        reachable = "yes"
+        notes = "api key accepted"
+
+    print(json.dumps({"configured": configured, "reachable": reachable, "notes": notes}))
+
+
+if __name__ == "__main__":
+    main()
