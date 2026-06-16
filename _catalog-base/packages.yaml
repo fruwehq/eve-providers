@@ -1,0 +1,31 @@
+# Workload package catalog (package identity registry).
+# Package install metadata (install trees, actions, etc.) lives in the
+# individual package manifests (eve-packages-*/<id>/eve-plugin.yaml).
+# This file is a catalog-base contribution discovered from plugin roots.
+packages:
+  - id: claude
+  - id: codex-cli
+  - id: dev-toolchain
+  - id: discord
+  - id: docker
+  - id: gnome-desktop
+  - id: gnome-desktop-headless
+  - id: goose
+  - id: hermes
+  - id: kde-desktop
+  - id: kde-desktop-headless
+  - id: macos-desktop-theme
+  - id: nomachine
+  - id: opencode
+  - id: rdp
+  - id: rustdesk
+  - id: splashtop
+  - id: steam
+  - id: sunshine
+  - id: thinlinc
+  - id: vscode
+  - id: vnc
+  - id: waypipe
+  - id: xfce-desktop
+  - id: xfce-desktop-headless
+  - id: xpra
