@@ -37,6 +37,15 @@ access:
     provision_user: {env: EVE_PROVISION_USER, location: provision_user}
     human_user: {env: VM_USER_NAME, fallback: provision_user}
 capabilities: [host-ssh]
+host_tools:
+  - name: nc
+    check: command -v nc
+    brew: xcode-select --install
+    apt: apt install netcat-openbsd
+  - name: curl
+    check: command -v curl
+    brew: brew install curl
+    apt: apt install curl
 config_schema:
   config:
     api_user:

@@ -37,6 +37,11 @@ access:
     provision_user: {env: VM_USER_NAME}
     human_user: {env: VM_USER_NAME, fallback: provision_user}
 capabilities: [login]
+host_tools:
+  - name: gcloud
+    check: command -v gcloud
+    brew: brew install --cask google-cloud-sdk
+    apt: install google-cloud-cli
 config_schema:
   config:
     project:
