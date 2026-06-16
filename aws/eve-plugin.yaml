@@ -40,6 +40,11 @@ access:
     provision_user: {value: Administrator}
     human_user: {value: Administrator}
 capabilities: [login]
+host_tools:
+  - name: aws-cli
+    check: command -v aws
+    brew: brew install awscli
+    apt: apt install awscli
 config_schema:
   config:
     config_file:
