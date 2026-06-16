@@ -1,0 +1,20 @@
+# OS identity catalog (shared across providers).
+# Provider-specific image fields (aws_ami_name_pattern, gcp_image_project,
+# vultr_os_id, cloud_image_url, etc.) merge onto these rows via the aggregator's
+# field-level union (merge_os_fields).
+# This file is a catalog-base contribution discovered from plugin roots.
+oses:
+  - id: ubuntu-26.04-amd64
+    family: ubuntu
+    version: "26.04"
+    arch: amd64
+
+  - id: ubuntu-26.04-arm64
+    family: ubuntu
+    version: "26.04"
+    arch: arm64
+
+  - id: windows-server-2025
+    family: windows
+    version: "2025"
+    arch: amd64

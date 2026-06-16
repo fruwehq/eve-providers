@@ -1,0 +1,15 @@
+# Init catalog (first-boot access + baseline hardening).
+# Each init declares which OS family and providers it supports.
+# This file is a catalog-base contribution discovered from plugin roots.
+inits:
+  - id: ssh-ubuntu-cloud-init
+    os_family: ubuntu
+    providers: [aws, gcp, local-qemu, truenas]
+
+  - id: ssh-ubuntu-metal
+    os_family: ubuntu
+    providers: [raspberry-pi]
+
+  - id: ssh-windows-powershell7
+    os_family: windows
+    providers: [aws, vultr]
