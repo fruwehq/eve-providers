@@ -79,3 +79,8 @@ catalog:
     - id: ubuntu-26.04-amd64
       gcp_image_project: ubuntu-os-cloud
       gcp_image_family: ubuntu-2604-lts-amd64
+  locations:
+    - name: tokyo
+      gcp:
+        region: asia-northeast1
+        zone: asia-northeast1-b

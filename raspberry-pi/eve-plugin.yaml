@@ -82,3 +82,7 @@ catalog:
   oses:
     - id: ubuntu-26.04-arm64
       metal_image: ubuntu-26.04-arm64
+  locations:
+    - name: tokyo
+      raspberry-pi:
+        ssh_port: 22

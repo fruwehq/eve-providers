@@ -60,3 +60,6 @@ catalog:
       docker_image: ubuntu:26.04
     - id: ubuntu-26.04-arm64
       docker_image: ubuntu:26.04
+  locations:
+    - name: tokyo
+      docker: {}

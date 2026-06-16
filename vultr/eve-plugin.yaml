@@ -94,3 +94,7 @@ catalog:
   oses:
     - id: windows-server-2025
       vultr_os_id: 2514 # Windows 2025 Standard x64
+  locations:
+    - name: tokyo
+      vultr:
+        region: nrt
