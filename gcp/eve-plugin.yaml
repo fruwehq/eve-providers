@@ -51,6 +51,13 @@ supports:
   engines: [terraform]
   kinds: [vm]
 env: [GOOGLE_APPLICATION_CREDENTIALS, GOOGLE_CLOUD_PROJECT, MY_IP, SSH_PUBLIC_KEY_FILE]
+env_emission:
+  - name: GCP_IMAGE_FAMILY
+    from: os.gcp_image_family
+    default: ""
+  - name: GCP_IMAGE_PROJECT
+    from: os.gcp_image_project
+    default: ""
 catalog:
   machines:
     - name: gcp-cheap-x86

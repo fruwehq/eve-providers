@@ -53,6 +53,20 @@ supports:
   engines: [metal]
   kinds: [metal]
 env: [RASPBERRY_PI_HOST, RASPBERRY_PI_IP, RASPBERRY_PI_USER_PASSWORD, VM_USER_NAME]
+env_emission:
+  - name: RASPBERRY_PI_HOST
+    from:
+      - provider_config.host
+      - provider_config.ip
+      - env:RASPBERRY_PI_HOST
+      - location.host
+    default: ""
+  - name: RASPBERRY_PI_IP
+    from:
+      - provider_config.ip
+      - env:RASPBERRY_PI_IP
+      - location.ip
+    default: ""
 catalog:
   machines:
     - name: raspberry-pi-5

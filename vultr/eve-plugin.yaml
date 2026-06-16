@@ -46,6 +46,11 @@ supports:
   engines: [terraform]
   kinds: [vm]
 env: [VULTR_API_KEY]
+env_emission:
+  - name: VULTR_OS_ID
+    from: os.vultr_os_id
+    default: 0
+    tostring: true
 catalog:
   machines:
     - name: vultr-vcg-a40-1c # 1 vCPU, 5 GB RAM, 90 GB NVMe, 3 TB/mo, $0.075/hr, 1/24 NVIDIA A40 (2 GB VRAM)

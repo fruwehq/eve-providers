@@ -90,6 +90,27 @@ env:
   - TRUENAS_SSH_PORT
   - TRUENAS_SSH_PRIVATE_KEY_FILE
   - TRUENAS_SSH_USER
+env_emission:
+  - name: CLOUD_IMAGE_URL
+    from: os.cloud_image_url
+    default: ""
+    match_provider: true
+  - name: TRUENAS_HOST
+    from:
+      - env:TRUENAS_HOST
+      - location.host
+    default: ""
+  - name: TRUENAS_SSH_PORT
+    from:
+      - env:TRUENAS_SSH_PORT
+      - location.ssh_port
+    default: 22
+    tostring: true
+  - name: TRUENAS_SSH_USER
+    from:
+      - env:TRUENAS_SSH_USER
+      - location.ssh_user
+    default: ""
 catalog:
   machines:
     - name: truenas-scale-medium

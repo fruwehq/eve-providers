@@ -38,6 +38,11 @@ supports:
   engines: [qemu]
   kinds: [vm]
 env: []
+env_emission:
+  - name: CLOUD_IMAGE_URL
+    from: os.cloud_image_url
+    default: ""
+    match_provider: true
 catalog:
   machines:
     - name: local-qemu-medium
