@@ -1,0 +1,113 @@
+#!/usr/bin/env python3
+"""Docker provider lifecycle dispatcher.
+
+Manages a container as a manageable instance via the docker CLI.
+Honors EVE_PLUGIN_DRY_RUN (prints JSON intent instead of running).
+"""
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+
+
+def _read_resolved() -> dict:
+    raw = os.environ.get("EVE_RESOLVED_JSON")
+    if raw is None or not raw:
+        raw = sys.stdin.read()
+    return json.loads(raw)
+
+
+def _container_name(resolved: dict) -> str:
+    return resolved["instance"]["name"]
+
+
+def _docker_image(resolved: dict) -> str:
+    os_doc = resolved.get("os", {})
+    return str(os_doc.get("docker_image") or "ubuntu:latest")
+
+
+def _dry_run(provider: str, command: str, resolved: dict, **extra: object) -> int:
+    payload = {"kind": "provider", "provider": provider, "command": command,
+               "instance": resolved["instance"]["name"], "profile": resolved["instance"]["name"],
+               "engine": resolved.get("engine", "docker"), "dry_run": True}
+    payload.update(extra)
+    print(json.dumps(payload, separators=(",", ":")))
+    return 0
+
+
+def main() -> int:
+    command = sys.argv[1] if len(sys.argv) > 1 else ""
+    provider = os.environ.get("EVE_PROVIDER_PLUGIN", "docker")
+    dry = os.environ.get("EVE_PLUGIN_DRY_RUN") == "1" or command == "resolve"
+    resolved = _read_resolved()
+    name = _container_name(resolved)
+    image = _docker_image(resolved)
+
+    if command == "resolve" or dry:
+        return _dry_run(provider, command, resolved)
+
+    if command == "init":
+        # Containers don't need init; no-op.
+        print(f"[{provider}] container init: no-op", file=sys.stderr)
+        return 0
+
+    if command == "plan":
+        # Show what would run.
+        print(f"[{provider}] would run: docker run -d --name {name} {image}")
+        return 0
+
+    if command == "up":
+        r = subprocess.run(
+            ["docker", "run", "-d", "--name", name, image],
+            check=False,
+        )
+        if r.returncode == 0:
+            print(json.dumps({"status": "running", "ip": ""}))
+        return r.returncode
+
+    if command == "down":
+        subprocess.run(["docker", "rm", "-f", name], check=False)
+        return 0
+
+    if command == "start":
+        return subprocess.run(["docker", "start", name], check=False).returncode
+
+    if command == "stop":
+        return subprocess.run(["docker", "stop", name], check=False).returncode
+
+    if command == "status":
+        r = subprocess.run(
+            ["docker", "inspect", "-f", "{{.State.Status}}", name],
+            capture_output=True, text=True, check=False,
+        )
+        state = r.stdout.strip() if r.returncode == 0 else "absent"
+        mapping = {"running": "running", "exited": "stopped", "created": "stopped",
+                   "paused": "stopped", "restarting": "changing"}
+        status = mapping.get(state, "absent")
+        print(json.dumps({"status": status}))
+        return 0
+
+    if command == "ip":
+        r = subprocess.run(
+            ["docker", "inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}", name],
+            capture_output=True, text=True, check=False,
+        )
+        ip = r.stdout.strip() if r.returncode == 0 else ""
+        print(json.dumps({"status": "running" if ip else "unknown", "ip": ip}))
+        return 0
+
+    if command == "exec":
+        # docker exec as the "ssh" equivalent (manageable via docker exec).
+        extra_args = sys.argv[2:]
+        cmd = ["docker", "exec", "-it" if sys.stdin.isatty() else "-i", name, *extra_args]
+        os.execvp(cmd[0], cmd)
+        return 1  # unreachable
+
+    print(f"[{provider}] unsupported command: {command}", file=sys.stderr)
+    return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

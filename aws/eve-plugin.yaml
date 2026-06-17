@@ -117,3 +117,8 @@ catalog:
 
     - id: windows-server-2025
       aws_ami_name_pattern: Windows_Server-2025-English-Full-Base-*
+  locations:
+    - name: tokyo
+      aws:
+        region: ap-northeast-1
+        availability_zone: ap-northeast-1b
