@@ -39,3 +39,10 @@ jobs:
             [ -f "$d/eve-plugin.yaml" ] || continue
             eve/scripts/plugin-test "$d"
           done
+
+      # Host OS-portability of the raspberry-pi host-resolver helper (mocks
+      # uname + lookup tools, so both the Linux and macOS branches run here).
+      # Relocated from eve's test-os-portability in v4.2 — this is where the
+      # code lives.
+      - name: host-resolver OS portability
+        run: python3 tests/test-host-resolver
