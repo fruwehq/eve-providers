@@ -14,6 +14,7 @@ commands:
   ip: {exec: commands/docker, args: [ip]}
   ssh: {exec: commands/docker, args: [exec]}
   validate: {exec: ../_common/commands/validate-os, args: [all, docker image, docker_image]}
+  connectivity: {exec: commands/connectivity}
 actions:
   - id: status-details
     label: Status
