@@ -53,7 +53,7 @@ if [ "${1:-}" = "--scp" ]; then
   shift
   LOCAL_PATH="${1:?--scp requires <local> <remote>}"
   REMOTE_PATH="${2:?--scp requires <local> <remote>}"
-  exec scp -O "${SSH_OPTS[@]}" -r "$LOCAL_PATH" "$SSH_USER@$IP:$REMOTE_PATH"
+  exec scp "${SSH_OPTS[@]}" -r "$LOCAL_PATH" "$SSH_USER@$IP:$REMOTE_PATH"
 fi
 
 if [ "${1:-}" = "--" ]; then
