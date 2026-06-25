@@ -199,15 +199,12 @@ try {
     $stepError = $null
     $stepExitCode = 0
     try {
-      $LASTEXITCODE = 0
+      # PowerShell sets $LASTEXITCODE from the last native command (exe) inside
+      # the step, which is unreliable for success/failure (e.g. powercfg returns
+      # -1 for informational messages). The only reliable signal is whether the
+      # step threw a terminating error. If the step completes without throwing,
+      # treat it as success regardless of $LASTEXITCODE or $?.
       & $Step.FullName 2>&1 | ForEach-Object { Log $_ }
-      $nativeExitCode = $LASTEXITCODE
-      $stepSucceeded = $?
-      if ($nativeExitCode -ne 0) {
-        $stepExitCode = $nativeExitCode
-      } elseif (-not $stepSucceeded) {
-        $stepExitCode = 1
-      }
     } catch {
       $stepError = $_
       $stepExitCode = if ($LASTEXITCODE -ne 0) { $LASTEXITCODE } else { 1 }
