@@ -35,24 +35,32 @@ config_schema:
     hdmi_connector:
       type: enum
       enum: [HDMI-A-1, HDMI-A-2]
+      env_var: RASPBERRY_PI_HDMI_CONNECTOR
       description: "Raspberry Pi HDMI connector name."
     hdmi_mode:
       type: string
+      env_var: RASPBERRY_PI_HDMI_MODE
       description: "Raspberry Pi HDMI mode override."
     host:
       type: host
+      env_var: RASPBERRY_PI_HOST
       description: "Raspberry Pi host name used for IP discovery."
     ip:
       type: string
+      env_var: RASPBERRY_PI_IP
       description: "Raspberry Pi fixed IP override."
   secrets:
     user_password:
       type: string
       description: "Raspberry Pi user's login password for bootstrap."
+bootstrap:
+  # Core reads this env var generically to install NOPASSWD sudo on first
+  # contact when the SSH user lacks it — core names no provider.
+  sudo_password_env: RASPBERRY_PI_USER_PASSWORD
 supports:
   engines: [metal]
   kinds: [metal]
-env: [RASPBERRY_PI_HOST, RASPBERRY_PI_IP, RASPBERRY_PI_USER_PASSWORD, VM_USER_NAME]
+env: [RASPBERRY_PI_HDMI_CONNECTOR, RASPBERRY_PI_HDMI_MODE, RASPBERRY_PI_HOST, RASPBERRY_PI_IP, RASPBERRY_PI_USER_PASSWORD, VM_USER_NAME]
 env_emission:
   - name: RASPBERRY_PI_HOST
     from:

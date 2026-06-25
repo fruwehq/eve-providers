@@ -1,0 +1,9 @@
+api_version: eve.plugin/v1
+kind: os
+id: ubuntu-26.04-arm64
+display_name: Ubuntu 26.04 (arm64)
+provision:
+  dir: provision
+supports:
+  family: ubuntu
+  arches: [arm64]

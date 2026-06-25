@@ -1,0 +1,9 @@
+api_version: eve.plugin/v1
+kind: os
+id: windows-server-2025
+display_name: Windows Server 2025
+provision:
+  dir: provision
+supports:
+  family: windows
+  arches: [amd64]
