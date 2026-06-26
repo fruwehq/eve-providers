@@ -219,7 +219,7 @@ generate_hcl "z_ec2_instance.tf" {
 
     locals {
       windows_user_data = templatefile(
-        "${terramate.root.path.fs.absolute}/oses/windows-server-2025/ssh.ps1.tftpl",
+        "${terramate.root.path.fs.absolute}/plugins/providers/_terraform-common/oses/windows-server-2025/ssh.ps1.tftpl",
         {
           public_key = trimspace(file(pathexpand(var.ssh_public_key_file)))
         }
