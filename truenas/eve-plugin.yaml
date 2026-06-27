@@ -146,7 +146,7 @@ catalog:
 
     - id: ubuntu-26.04-arm64
       cloud_image_url: https://cloud-images.ubuntu.com/releases/26.04/release/ubuntu-26.04-server-cloudimg-arm64.img
-      cloud_image_sha256: 5e091e27d60116efbb0c743b8dd5cb2d15618e414ef04db0817ed43c8e2d7c7b
+      cloud_image_sha256: 5e1c212ac29354dbf51c5b1926d8a359de57ca8c2d2bdacf17651129c29791cb
   locations:
     - name: tokyo
       truenas:
