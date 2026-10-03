@@ -53,10 +53,14 @@ config_schema:
       type: path
       env_var: GOOGLE_APPLICATION_CREDENTIALS
       description: "Service-account JSON file for Terraform Application Default Credentials."
+    oauth_access_token:
+      type: string
+      env_var: GOOGLE_OAUTH_ACCESS_TOKEN
+      description: "Short-lived OAuth access token used by Terraform when Application Default Credentials are unavailable. Treat as a secret."
 supports:
   engines: [terraform]
   kinds: [vm]
-env: [GOOGLE_APPLICATION_CREDENTIALS, GOOGLE_CLOUD_PROJECT, MY_IP, SSH_PUBLIC_KEY_FILE]
+env: [GOOGLE_APPLICATION_CREDENTIALS, GOOGLE_CLOUD_PROJECT, GOOGLE_OAUTH_ACCESS_TOKEN, GOOGLE_PROJECT, MY_IP, SSH_PUBLIC_KEY_FILE]
 env_emission:
   - name: GCP_IMAGE_FAMILY
     from: os.gcp_image_family

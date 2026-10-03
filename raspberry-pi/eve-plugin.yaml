@@ -52,6 +52,7 @@ config_schema:
   secrets:
     user_password:
       type: string
+      env_var: RASPBERRY_PI_USER_PASSWORD
       description: "Raspberry Pi user's login password for bootstrap."
 bootstrap:
   # Core reads this env var generically to install NOPASSWD sudo on first

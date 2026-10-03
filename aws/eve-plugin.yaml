@@ -56,7 +56,7 @@ config_schema:
     profile:
       type: string
       env_var: AWS_PROFILE
-      description: "AWS CLI/SSO profile name used by Terraform and the AWS Login action. If unset, the default profile / ambient AWS environment is used. Example: my-sso-profile."
+      description: "AWS CLI/SSO profile name used by Terraform and the AWS Login action. Required unless a static access-key pair is configured. Example: my-sso-profile."
     region:
       type: string
       default: "us-east-1"
@@ -67,17 +67,26 @@ config_schema:
       default: "~/.aws/credentials"
       env_var: AWS_SHARED_CREDENTIALS_FILE
       description: "Path to the AWS CLI credentials file used by Terraform. Default: ~/.aws/credentials. Leave unset to use that default."
+  required_any:
+    - [config.profile]
+    - [secrets.access_key_id, secrets.secret_access_key]
   secrets:
     access_key_id:
       type: string
-      description: "Static AWS access key ID (AWS_ACCESS_KEY_ID). OPTIONAL — leave unset to authenticate via your profile / SSO / environment / instance role (recommended). Set only for static-key auth; if set it overrides the profile. Example: AKIA..."
+      env_var: AWS_ACCESS_KEY_ID
+      description: "Static AWS access key ID. Optional when using a profile; otherwise provide it together with secret_access_key. Example: AKIA..."
     secret_access_key:
       type: string
-      description: "Static AWS secret access key (AWS_SECRET_ACCESS_KEY). OPTIONAL — required only if access_key_id is set; otherwise leave unset to use your profile / SSO. Treat as a secret."
+      env_var: AWS_SECRET_ACCESS_KEY
+      description: "Static AWS secret access key. Optional when using a profile; otherwise provide it together with access_key_id. Treat as a secret."
+    session_token:
+      type: string
+      env_var: AWS_SESSION_TOKEN
+      description: "Optional session token used with temporary static credentials. Treat as a secret."
 supports:
   engines: [terraform]
   kinds: [vm]
-env: [AWS_CONFIG_FILE, AWS_PROFILE, AWS_REGION, AWS_SHARED_CREDENTIALS_FILE]
+env: [AWS_ACCESS_KEY_ID, AWS_CONFIG_FILE, AWS_PROFILE, AWS_REGION, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN, AWS_SHARED_CREDENTIALS_FILE]
 catalog:
   machines:
     - name: aws-cheap-x86
