@@ -54,12 +54,20 @@ eve_tf_state_json() {
         return 0
       fi
     done
+    # An explicit instance state directory with no state is an absent instance.
+    # Do not query a different backend or workspace behind the caller's back.
+    return 0
   fi
 
-  terramate generate >/dev/null
-  state_json=$(terramate run "${EVE_TM_READ_FLAGS[@]}" --quiet --tags="$tags-services" -- terraform show -json 2>/dev/null) || true
-  if [ -n "$state_json" ] && printf '%s\n' "$state_json" | jq -e . >/dev/null 2>&1; then
+  terramate generate >/dev/null || return $?
+  state_json=$(terramate run "${EVE_TM_READ_FLAGS[@]}" --quiet --tags="$tags-services" -- terraform show -json) || return $?
+  if [ -z "$state_json" ]; then
+    return 0
+  fi
+  if printf '%s\n' "$state_json" | jq -e . >/dev/null 2>&1; then
     printf '%s\n' "$state_json"
     return 0
   fi
+  echo "Cannot parse Terraform state response" >&2
+  return 1
 }
