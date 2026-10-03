@@ -58,4 +58,4 @@ jobs:
         run: python3 tests/test-provider-status-errors
 
       - name: OS provisioning runner tests
-        run: eve/scripts/test-provision-runner --plugin-roots "$PWD"
+        run: eve/scripts/test-provision-runner --plugin-roots "$PWD/oses"
