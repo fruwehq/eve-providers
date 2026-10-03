@@ -84,6 +84,7 @@ config_schema:
   secrets:
     api_key:
       type: string
+      env_var: TRUENAS_API_KEY
       description: "TrueNAS API key used by provider status checks and API-backed automation."
     ssh_private_key_file:
       type: path
@@ -95,11 +96,16 @@ supports:
   kinds: [vm]
 env:
   - EVE_PROVISION_USER
+  - TRUENAS_API_KEY
+  - TRUENAS_API_USER
   - TRUENAS_HOST
   - TRUENAS_SSH_HOST_KEY_FINGERPRINT
   - TRUENAS_SSH_PORT
   - TRUENAS_SSH_PRIVATE_KEY_FILE
   - TRUENAS_SSH_USER
+  - TRUENAS_VM_BASE_DIR
+  - TRUENAS_VM_POOL
+  - TRUENAS_VM_ZVOL_PREFIX
 env_emission:
   - name: CLOUD_IMAGE_URL
     from: os.cloud_image_url

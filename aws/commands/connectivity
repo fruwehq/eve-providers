@@ -30,13 +30,19 @@ def main() -> None:
         suffix = f" (profile {aws_profile})" if aws_profile else ""
         print(json.dumps({"configured": "yes", "reachable": "yes", "notes": f"aws sts ok{suffix}"}))
         return
-    if aws_profile or os.environ.get("AWS_ACCESS_KEY_ID", ""):
+    access_key = os.environ.get("AWS_ACCESS_KEY_ID", "")
+    secret_key = os.environ.get("AWS_SECRET_ACCESS_KEY", "")
+    if aws_profile:
         print(json.dumps({"configured": "yes", "reachable": "no",
                           "notes": "configured but aws sts failed - run the AWS Login provider action "
                                    "(SSO session may be expired)"}))
         return
+    if access_key and secret_key:
+        print(json.dumps({"configured": "yes", "reachable": "no",
+                          "notes": "configured but aws sts failed - verify the static credentials"}))
+        return
     print(json.dumps({"configured": "no", "reachable": "no",
-                      "notes": "no working AWS credentials; run AWS Login (SSO) or set aws.profile in settings"}))
+                      "notes": "configure aws.profile or a complete AWS access-key pair"}))
 
 
 if __name__ == "__main__":

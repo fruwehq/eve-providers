@@ -46,3 +46,9 @@ jobs:
       # code lives.
       - name: host-resolver OS portability
         run: python3 tests/test-host-resolver
+
+      - name: AWS configuration semantics
+        run: python3 tests/test-aws-connectivity
+
+      - name: Provider environment contracts
+        run: python3 tests/test-manifest-env-contract
