@@ -14,6 +14,7 @@ cd "$(git rev-parse --show-toplevel)"
 . "$(cd "$(dirname "$0")/../.." && pwd)/_common/lib/tf-state.sh"
 
 eve_load_profile_env "$PROFILE"
+: "${AWS_PROFILE:?An explicit named AWS profile is required}"
 
 printf '%-15s %s\n' "Profile:" "$PROFILE"
 printf '%-15s %s\n' "Engine:" "$ENGINE"
@@ -35,7 +36,7 @@ else
   INSTANCE_ID=$(eve_tf_attr "$STATE_JSON" "aws_instance.main" "id")
   if [ -n "$INSTANCE_ID" ] && command -v aws >/dev/null 2>&1; then
     LIVE=$(aws ec2 describe-instances --instance-ids "$INSTANCE_ID" \
-      ${AWS_PROFILE:+--profile "$AWS_PROFILE"} ${AWS_REGION:+--region "$AWS_REGION"} \
+      --profile "$AWS_PROFILE" ${AWS_REGION:+--region "$AWS_REGION"} \
       --query 'Reservations[].Instances[].State.Name' --output text)
     # Empty result = the instance no longer exists (terminated and aged out).
     RAW="${LIVE:-terminated}"

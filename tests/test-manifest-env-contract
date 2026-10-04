@@ -71,6 +71,20 @@ expected = {
     "raspberry-pi": {"user_password": "RASPBERRY_PI_USER_PASSWORD"},
     "truenas": {"api_key": "TRUENAS_API_KEY"},
 }
+
+aws = manifests["aws"]
+aws_schema = aws.get("config_schema") or {}
+for name in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN"):
+    if name in aws.get("env", []) or name in yaml.safe_dump(aws_schema):
+        failures.append(f"aws: removed credential environment variable {name} is declared")
+if "secrets" in aws_schema:
+    failures.append("aws: Eve-managed secret fields must not be declared")
+profile = (aws_schema.get("config") or {}).get("profile") or {}
+if profile.get("env_var") != "AWS_PROFILE" or profile.get("required") is not True:
+    failures.append("aws: explicit named profile must map to AWS_PROFILE and be required")
+if "AWS_PROFILE" not in aws.get("env", []):
+    failures.append("aws: AWS_PROFILE must be declared in the command environment")
+
 for plugin_id, mappings in expected.items():
     secrets = (manifests[plugin_id].get("config_schema") or {}).get("secrets") or {}
     for secret_name, expected_env in mappings.items():

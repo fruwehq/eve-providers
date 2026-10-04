@@ -24,7 +24,8 @@ echo "[tf-apply] profile=$PROFILE tags=$TAGS"
 
 terramate generate
 
-eval "$(./scripts/tf-env "$PROFILE")"
+TF_ENV=$(./scripts/tf-env "$PROFILE")
+eval "$TF_ENV"
 
 if [ -n "${EVE_INSTANCE_NAME:-}" ]; then
   echo "[tf-apply] instance=$EVE_INSTANCE_NAME initializing backend before apply"

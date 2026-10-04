@@ -31,7 +31,8 @@ TM_RUN_FLAGS=(
 
 terramate generate
 
-eval "$(./scripts/tf-env "$PROFILE")"
+TF_ENV=$(./scripts/tf-env "$PROFILE")
+eval "$TF_ENV"
 
 # Initialize the backend before destroy, mirroring `up`. Without this, a stack
 # whose .terraform backend isn't initialized (fresh checkout, cleaned cache,

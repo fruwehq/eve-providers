@@ -44,39 +44,52 @@ class AwsConnectivityTests(unittest.TestCase):
             subprocess_mock.DEVNULL = module._DEVNULL
             subprocess_mock.run.return_value = command_result
             module.main()
+            self.aws_command = subprocess_mock.run.call_args.args[0] if subprocess_mock.run.called else None
         parsed = json.loads(output.getvalue())
         self.assertIsInstance(parsed, dict)
         return parsed
 
-    def test_cli_missing_is_unconfigured(self) -> None:
-        result = self.run_probe({}, cli=False)
+    def test_ambient_credentials_do_not_configure_or_invoke_aws(self) -> None:
+        result = self.run_probe({
+            "AWS_ACCESS_KEY_ID": "ignored-access",
+            "AWS_SECRET_ACCESS_KEY": "ignored-secret",
+            "AWS_SESSION_TOKEN": "ignored-token",
+        }, returncode=0)
         self.assertEqual(result["configured"], "no")
         self.assertEqual(result["reachable"], "no")
+        self.assertIsNone(self.aws_command)
 
-    def test_complete_static_pair_is_configured(self) -> None:
-        result = self.run_probe(
-            {
-                "AWS_ACCESS_KEY_ID": "access",
-                "AWS_SECRET_ACCESS_KEY": "secret",
-            }
-        )
+    def test_missing_cli_with_profile_is_configured_but_unreachable(self) -> None:
+        result = self.run_probe({"AWS_PROFILE": "eve"}, cli=False)
         self.assertEqual(result["configured"], "yes")
         self.assertEqual(result["reachable"], "no")
+        self.assertIsNone(self.aws_command)
 
-    def test_partial_static_pair_is_unconfigured(self) -> None:
-        result = self.run_probe({"AWS_ACCESS_KEY_ID": "access"})
+    def test_no_profile_is_unconfigured_without_invoking_aws(self) -> None:
+        result = self.run_probe({}, returncode=0)
         self.assertEqual(result["configured"], "no")
         self.assertEqual(result["reachable"], "no")
+        self.assertIsNone(self.aws_command)
 
-    def test_profile_is_configured(self) -> None:
+    def test_profile_failure_is_configured_but_unreachable(self) -> None:
         result = self.run_probe({"AWS_PROFILE": "eve"})
         self.assertEqual(result["configured"], "yes")
         self.assertEqual(result["reachable"], "no")
+        self.assertIn("login/SSO session", result["notes"])
+        self.assertEqual(self.aws_command, ["aws", "--profile", "eve", "sts", "get-caller-identity"])
 
-    def test_successful_probe_is_reachable(self) -> None:
+    def test_profile_success_uses_explicit_name(self) -> None:
         result = self.run_probe({"AWS_PROFILE": "eve"}, returncode=0)
         self.assertEqual(result["configured"], "yes")
         self.assertEqual(result["reachable"], "yes")
+        self.assertEqual(self.aws_command, ["aws", "--profile", "eve", "sts", "get-caller-identity"])
+
+    def test_region_keeps_explicit_profile(self) -> None:
+        result = self.run_probe({"AWS_PROFILE": "named-profile", "AWS_REGION": "test-region"}, returncode=0)
+        self.assertEqual(result["reachable"], "yes")
+        self.assertEqual(self.aws_command, [
+            "aws", "--region", "test-region", "--profile", "named-profile", "sts", "get-caller-identity",
+        ])
 
 
 if __name__ == "__main__":

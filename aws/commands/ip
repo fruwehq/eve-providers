@@ -16,6 +16,7 @@ cd "$(git rev-parse --show-toplevel)"
 . "$(cd "$(dirname "$0")/../.." && pwd)/_common/lib/tf-state.sh"
 
 eve_load_profile_env "$PROFILE"
+: "${AWS_PROFILE:?An explicit named AWS profile is required}"
 eval "$(./scripts/tf-env "$PROFILE")"
 
 terramate run "${EVE_TM_READ_FLAGS[@]}" --quiet --tags="$TAGS-services" -- terraform output -raw public_ip

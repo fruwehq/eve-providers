@@ -36,7 +36,8 @@ if [ "${EVE_TF_PRINT:-0}" != "1" ]; then
   terramate generate
 fi
 
-eval "$(./scripts/tf-env "$PROFILE")"
+TF_ENV=$(./scripts/tf-env "$PROFILE")
+eval "$TF_ENV"
 
 init_args=(terraform init -reconfigure)
 tm_args=(
