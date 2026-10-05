@@ -7,6 +7,10 @@ The first-party **eve** providers, **one independent subfolder per provider**:
 guests through a project-restricted TLS API. See the provider contract, manual
 certificate setup, and explicitly opt-in remote-pool test there.
 
+[UTM feasibility and proposed contract](docs/utm/feasibility.md) records the next
+provider design. UTM is not yet a discoverable provider: supported Remote Login
+automation and safe clone reconciliation must be established first.
+
 A provider owns infra stand-up and everything needed to make an instance
 **manageable** (init / cloud-init / bootstrap user; SSH, or `docker exec` for the
 docker provider) — the pre-provisioning tier. Each lives in its own subfolder
