@@ -10,8 +10,13 @@ on:
 jobs:
   plugin-test:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: providers
     steps:
       - uses: actions/checkout@v5
+        with:
+          path: providers
 
       # eve is not published to PyPI yet — clone the repo for its conformance
       # harness + schema. Once eve ships, replace this step with `pip install eve`
@@ -26,7 +31,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - run: pip install ./eve
+      - run: pip install ../eve
 
       # Run the conformance harness against every provider plugin in this repo.
       # Provider plugins live one level below the repo root (local-qemu, aws, gcp,
@@ -38,7 +43,7 @@ jobs:
         run: |
           set -e
           git ls-files '*eve-plugin.yaml' | while IFS= read -r manifest; do
-            eve/scripts/plugin-test "$manifest"
+            ../eve/scripts/plugin-test "$manifest"
           done
 
       # Host OS-portability of the raspberry-pi host-resolver helper (mocks
@@ -63,4 +68,4 @@ jobs:
         run: python3 tests/test-provider-status-errors
 
       - name: OS provisioning runner tests
-        run: eve/scripts/test-provision-runner --plugin-roots "$PWD/oses"
+        run: ../eve/scripts/test-provision-runner --plugin-roots "$PWD/oses"

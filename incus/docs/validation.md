@@ -166,3 +166,18 @@ Live testing remains explicitly skipped. No private-pool access, TLS enrollment,
 live resource operation, Determa dependency/FSM/adapter/restoration change, or
 unreleased capability was introduced. New CI must be evaluated on the pushed
 review-fix commits independently of earlier results.
+
+### Installed-wheel CI layout follow-up
+
+The first review-fix CI run passed 121 Incus tests and failed one discovery
+integration test because the workflow nested the Eve checkout inside the provider
+plugin root. Discovery then encountered Eve's intentionally invalid test
+manifests. The workflow now checks out providers and core as siblings and runs
+provider commands from the providers directory.
+
+This layout was reproduced from tracked Git archives with a newly built,
+non-editable Eve wheel installed into a clean venv (no source PYTHONPATH):
+**all 122 Incus tests passed**, along with AWS, host-resolver, manifest environment
+contracts, and backend/status tests. Both GitHub core matrix jobs have also
+successfully executed the new isolated wheel test. Full core Linux CI and fresh
+provider checks still require their own final conclusions.
