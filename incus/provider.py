@@ -14,6 +14,7 @@ import re
 import struct
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -48,11 +49,13 @@ def configuration(resolved: dict[str, Any] | None = None) -> dict[str, Any]:
     subnet = ipaddress.ip_network(result["subnet"], strict=True)
     if subnet.version != 4:
         raise IncusError("Incus guest subnet must be IPv4")
-    if result["image"] != DEFAULTS["config"]["image"] and not re.fullmatch(
+    if result["project"] == "default":
+        raise IncusError("An explicitly confined non-default project is required")
+    if not re.fullmatch(
         re.escape(result["remote"]) + r":[0-9a-f]{64}", result["image"]
     ):
         raise IncusError(
-            "Image must be the configured cloud alias or a preloaded remote fingerprint"
+            "Image must be an immutable preloaded fingerprint on the configured remote"
         )
     return result
 
@@ -132,12 +135,14 @@ class Provider:
             (config["run_id"] + ":" + name).encode()
         ).hexdigest()
         self.identity = {
-            "endpoint": config["endpoint"],
-            "instance_name": self.name,
-            "owner_id": self.owner,
-            "project": self.project,
             "provider": "incus",
-            "remote": self.remote,
+            "identity": {
+                "endpoint": config["endpoint"],
+                "instance_name": self.name,
+                "owner_id": self.owner,
+                "project": self.project,
+                "remote": self.remote,
+            },
         }
 
     def _check_client(self) -> None:
@@ -176,14 +181,36 @@ class Provider:
             raise IncusError("Incus client key must have private permissions (0600)")
 
     def call(self, *args: str, input_text: str | None = None) -> str:
+        # Incus 7.0 query explicitly rejects --project. Its raw API URL must
+        # carry the configured project, and only this verified state read is
+        # permitted through that boundary. All other commands use --project.
+        if args and args[0] == "query":
+            expected = (
+                self.remote
+                + ":/1.0/instances/"
+                + self.name
+                + "/state?project="
+                + self.project
+            )
+            if args != ("query", expected):
+                raise IncusError("Refusing an unqualified Incus state query")
+            command = ["incus", *args]
+        else:
+            command = ["incus", "--project", self.project, *args]
         try:
+            timeout = self.config["command_timeout"]
+            deadline = getattr(self, "_cleanup_deadline", None)
+            if deadline is not None:
+                timeout = min(timeout, deadline - time.monotonic())
+                if timeout <= 0:
+                    raise IncusError("Incus cleanup deadline reached")
             result = subprocess.run(
-                ["incus", "--project", self.project, *args],
+                command,
                 env=self.environment,
                 input=input_text if input_text is not None else "",
                 text=True,
                 capture_output=True,
-                timeout=self.config["command_timeout"],
+                timeout=timeout,
                 check=False,
             )
         except subprocess.TimeoutExpired as error:
@@ -280,6 +307,7 @@ class Provider:
                 "limits.memory": str(machine["memory_mb"]) + "MiB",
                 "security.privileged": "false",
                 "user.eve.owner": self.owner,
+                "user.eve.image": self.config["image"].split(":", 1)[1],
             },
             "devices": {
                 "root": {"type": "disk", "path": "/", "pool": machine["pool"]},
@@ -317,6 +345,8 @@ class Provider:
             )
             or row.get("devices") != document["devices"]
             or row.get("profiles") != []
+            or row.get("config", {}).get("volatile.base_image")
+            != self.config["image"].split(":", 1)[1]
         ):
             raise IncusError(
                 "Existing instance conflicts with the complete bootstrap blueprint"
@@ -348,8 +378,15 @@ class Provider:
                 self.call("stop", self.target)
                 if self.state(self.observe()) != "stopped":
                     raise IncusError("Stop did not establish a stopped instance")
-            elif state not in {"stopped", "absent", "failed"}:
-                raise IncusError("Cannot delete an ambiguous instance")
+            elif row is not None and state != "stopped":
+                # Error is not a power state. Query the scoped instance state
+                # after observe() verified project/type/ownership.
+                power = self.power_state()
+                if power in {"running", "frozen"}:
+                    self.call("stop", self.target, "--force")
+                    power = self.power_state()
+                if power != "stopped":
+                    raise IncusError("Cannot delete until stopped power is established")
             if row is not None:
                 self.call("delete", self.target)
             expected = "absent"
@@ -360,7 +397,60 @@ class Provider:
             raise IncusError(
                 "Incus operation did not establish the requested observed state"
             )
-        return {"status": observed, "provider_identity": self.identity}
+        output = {"status": observed, "provider_identity": self.identity}
+        if command == "status" and observed == "running":
+            output["guest_access"] = self.access()[0]
+        return output
+
+    def power_state(self) -> str:
+        output = self.call(
+            "query",
+            self.remote
+            + ":/1.0/instances/"
+            + self.name
+            + "/state?project="
+            + self.project,
+        )
+        try:
+            state = json.loads(output)
+            if not isinstance(state, dict):
+                raise ValueError
+            return {
+                (102, "Stopped"): "stopped",
+                (103, "Running"): "running",
+                (110, "Frozen"): "frozen",
+            }.get((state["status_code"], state["status"]), "unknown")
+        except (KeyError, TypeError, ValueError) as error:
+            raise IncusError("Incomplete or malformed Incus power state") from error
+
+    def cleanup(self) -> None:
+        deadline = time.monotonic() + DEFAULTS["live"]["cleanup_timeout"]
+        self._cleanup_deadline = deadline
+        try:
+            while True:
+                try:
+                    if (
+                        self.lifecycle("down")["status"] == "absent"
+                        and self.observe() is None
+                    ):
+                        return
+                except IncusError:
+                    pass
+                if time.monotonic() >= deadline:
+                    raise IncusError(
+                        "Cleanup could not establish absence; reconcile "
+                        + self.target
+                        + " project="
+                        + self.project
+                    )
+                time.sleep(
+                    min(
+                        DEFAULTS["live"]["poll_interval"],
+                        max(0, deadline - time.monotonic()),
+                    )
+                )
+        finally:
+            del self._cleanup_deadline
 
     def address(self, row: dict[str, Any] | None) -> str:
         if self.state(row) != "running":
@@ -421,7 +511,7 @@ class Provider:
             },
             "host_identity": {
                 "fingerprint": fingerprint,
-                "mechanism": "provider-authenticated-exec",
+                "mechanism": "incus-authenticated-exec",
             },
             "port": bootstrap["port"],
             "protocol": bootstrap["protocol"],
@@ -472,10 +562,14 @@ class Provider:
                     len(args) != 3
                     or args[1].startswith("-")
                     or ":" in args[1]
-                    or not re.fullmatch(r"/[a-zA-Z0-9_./-]+", args[2])
+                    or not re.fullmatch(r"/?[a-zA-Z0-9_][a-zA-Z0-9_./-]*", args[2])
+                    or any(
+                        part in {".", "..", ""}
+                        for part in args[2].strip("/").split("/")
+                    )
                 ):
                     raise IncusError(
-                        "scp requires an explicit local path and remote path"
+                        "scp requires a safe absolute or home-relative destination"
                     )
                 command = [
                     "scp",

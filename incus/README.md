@@ -6,8 +6,8 @@ and package plugins. It neither needs nor uses SSH to the Incus host.
 
 Supported composition: `incus-ubuntu-ci`, `kind: container`, engine `incus`,
 `ubuntu-26.04-amd64`, init `incus-cloud-init`, location `incus-pool`. Ubuntu's
-bootstrap, provisioning, and human user is `ubuntu`. The default cloud image is
-`images:ubuntu/26.04/cloud`; it must contain working cloud-init. ARM, VMs,
+bootstrap, provisioning, and human user is `ubuntu`. Creation requires an immutable preloaded cloud-image fingerprint on the configured
+remote; the image must contain working cloud-init. ARM, VMs,
 privileged containers, nested virtualization, and root SSH are not supported.
 The server's `dir` storage pool does not provide a disk quota in this contract.
 
@@ -18,23 +18,25 @@ fields prohibited. `eve-plugin.yaml` exposes the same fields as
 `EVE_INCUS_<UPPERCASE_FIELD>` to Eve's isolated provider environment. Non-secret
 preferences belong under `incus:` in the explicitly selected Eve config YAML;
 per-instance `provider_config.incus` overrides use exactly the same schema.
-No credential contents belong in this YAML. Defaults are in `defaults.yaml`
-and the catalog; authentication paths have no defaults.
+No credential contents belong in this YAML. Generic resource/bootstrap defaults are in `defaults.yaml` and the catalog.
+Endpoint, remote, project, subnet, image fingerprint, and authentication paths
+have no defaults and must be explicitly configured. `pool.example.yaml` describes
+the local pool only and is never automatically loaded by the provider.
 
 | Field | Type / constraint | Meaning |
 | --- | --- | --- |
 | `command_timeout` | integer, 1–600 seconds | Timeout for every client/SSH operation; default 120. |
 | `config_dir` | absolute directory path; mode 0700 | Dedicated client config, restricted TLS identity, pinned server certificate. |
-| `endpoint` | HTTPS URL with explicit port | Must exactly match the TLS remote; pool default `https://192.168.1.108:8443`. |
-| `image` | exact cloud alias, or configured-remote 64-hex fingerprint | Alias may populate the project's image cache. Live tests require a preloaded fingerprint. |
-| `instance_prefix` | lowercase DNS label, 1–10 characters | Resource namespace; default `eve-ci`. |
+| `endpoint` | HTTPS URL with explicit port | Must exactly match the TLS remote; no pool-specific default. |
+| `image` | configured-remote 64-hex fingerprint | Creation and reconciliation verify the immutable actual base image; aliases are rejected. |
+| `instance_prefix` | lowercase DNS label, 1–10 characters | Resource namespace; default `eve`. |
 | `nic` | explicit guest interface name | Only this NIC supplies guest IPv4; default `eth0`. |
-| `project` | constant `eve-ci` | Every client call supplies `--project eve-ci`. |
+| `project` | explicit non-default project | Lifecycle calls supply `--project`; the state query embeds `?project=` (Incus 7.0 rejects the flag on `query`). The certificate must authorize only it. |
 | `public_key_file` | absolute file path | Explicit controller Ed25519 public key, read only for creation/reconciliation. |
-| `remote` | lowercase remote name | Explicit TLS remote; default `eve-incus-pool`, never `local`. |
+| `remote` | lowercase remote name | Explicit TLS remote; no default, never `local` or `images`. |
 | `run_id` | lowercase UUID | Unique run identity; preserve for retries and cleanup. |
 | `ssh_private_key_file` | absolute file path | Selected SSH credential reference; passed to OpenSSH, never read/copied by Eve. |
-| `subnet` | strict IPv4 CIDR | Intended routed guest subnet; default `10.201.153.0/24`. |
+| `subnet` | strict IPv4 CIDR | Intended routed guest subnet; no default. |
 
 Example controller preferences (replace paths and the UUID explicitly):
 
@@ -42,7 +44,7 @@ Example controller preferences (replace paths and the UUID explicitly):
 incus:
   config_dir: /absolute/controller/eve-incus-client
   endpoint: https://192.168.1.108:8443
-  image: images:ubuntu/26.04/cloud
+  image: eve-incus-pool:<64-hex-image-fingerprint>
   instance_prefix: eve-ci
   project: eve-ci
   public_key_file: /absolute/controller/eve-ci.pub
@@ -74,10 +76,12 @@ at the provider boundary and when core consumes them:
 * `start` / `stop`: idempotent for running/stopped respectively; absent start and
   absent stop fail. A request that does not reach its requested state fails.
 * `down`: stop before deleting; absent deletion succeeds. Ambiguous states fail.
-* `status`: JSON `{status, provider_identity}`. Status is one of `absent`,
+* `status`: JSON `{status, provider_identity, guest_access?}`. Status is one of `absent`,
   `creating`, `failed`, `running`, `stopped`, `unknown`. Code and status text must
   agree; Starting maps to creating, Error to failed, Frozen/other codes to
-  unknown. Invalid/missing data or API failure is an error, never absence.
+  unknown. Invalid/missing data or API failure is an error, never absence. Running status
+  includes the authenticated access binding; missing address/host identity fails
+  refresh and clears cached access. Non-running observations clear bindings.
 * `ip`: a single IPv4 text address for compatibility with existing Eve scripts.
   Only one global IPv4 in the configured NIC/subnet is accepted. Missing,
   malformed, or multiple matching addresses fail.
@@ -87,7 +91,9 @@ at the provider boundary and when core consumes them:
 * `validate`: validate composition metadata offline during resolution; no credentials, public-key read, or API call.
 * `connectivity`: probe the explicit project's API using the restricted identity.
 * `ssh`: SSH or the standard Eve `--scp <local> <remote>` transport; supports
-  recursive uploads to explicit absolute Linux paths. No Incus exec substitute
+  recursive uploads to validated absolute or home-relative paths such as
+  `provision/` and `provision/state/`. Empty/traversal components, option prefixes,
+  colons, substitutions, and shell metacharacters are rejected. No Incus exec substitute
   is used for normal guest management.
 
 The strict `guest_access` object permits **only**:
@@ -96,16 +102,19 @@ The strict `guest_access` object permits **only**:
 | --- | --- |
 | `address` | intended IPv4 address, validated against NIC/subnet by provider |
 | `credential_reference` | `{type: ssh-private-key-file, path: <absolute configured path>}` |
-| `host_identity` | `{mechanism: provider-authenticated-exec, fingerprint: SHA256:<43-char base64 digest>}` |
+| `host_identity` | `{mechanism: incus-authenticated-exec, fingerprint: SHA256:<43-char base64 digest>}` |
 | `port` | integer 1–65535; bootstrap uses 22 |
 | `protocol` | `ssh` |
-| `provider_identity` | strict `{endpoint, instance_name, owner_id, project, provider, remote}` |
+| `provider_identity` | closed `{provider: incus, identity: {endpoint, instance_name, owner_id, project, remote}}` |
 | `username` | valid Linux username; bootstrap uses `ubuntu` |
 | `version` | integer `2` (SSH protocol) |
 
-`provider_identity` fields are nonempty strings; endpoint is HTTPS, instance
-name and remote are validated DNS labels, owner is a 64-hex digest. Here provider
-is `incus`, project is `eve-ci`. Core validates these nested objects rather than
+The shared identity envelope discriminates by provider; its Incus variant
+contains nonempty strings. Endpoint is HTTPS, instance
+name and remote are validated DNS labels, owner is a 64-hex digest. The project is explicitly configured. Other providers add their own closed schema
+variant; they do not have to implement Incus remote/project/owner semantics.
+Host identity also supports `configured-fingerprint` for controller-pinned SSH
+keys, independently of the Incus authenticated-exec mechanism. Core validates these nested objects rather than
 accepting an opaque JSON bag. The observation cache validates the same binding.
 
 Creation sends cloud-init user-data, `openssh-server`, the configured public key,
@@ -138,8 +147,9 @@ project selector alone is **not** authorization confinement.
 
 ## Routed guest networking
 
-The dedicated host is `eve-incus-pool`, LAN `192.168.1.108`, MAC
-`00:A0:98:28:CC:F0`. Its `incusbr0` bridge is `10.201.153.1/24`; guests use DHCP
+The local example host is `eve-incus-pool`, LAN `192.168.1.108`, MAC
+`00:A0:98:28:CC:F0`. This local example pool
+uses an `incusbr0` bridge at `10.201.153.1/24`; guests use DHCP
 within `10.201.153.0/24`. OpenWrt routes that subnet via `192.168.1.108`.
 IPv4 NAT is disabled, so guest addresses are reached directly through that route.
 Verify IPv6 is disabled. Permit controller-to-guest TCP 22 and the necessary
@@ -177,8 +187,12 @@ PYTHONPATH=/absolute/eve /absolute/eve/.venv/bin/python tests/test-incus-live \
 ```
 
 The test creates a cloud guest, waits for authenticated SSH, verifies `ubuntu`,
-cloud-init and sshd, stops/starts, waits again, and deletes. A `finally` block
-verifies absence on success, failure, Ctrl-C, and SIGTERM. Temporary host-key
+cloud-init and sshd, stops/starts, waits again, and deletes. A `finally` block runs bounded observation/deletion retries (120-second deadline,
+2-second polling) on success, failure, Ctrl-C, and SIGTERM. Transient states are
+observed until actual power is known; running/frozen Error states are stopped
+with `--force` only after scope/type/ownership verification. Deletion requires
+stopped power, never an inference from Error. If absence cannot be established,
+the final error names the qualified instance and project for manual reconciliation. Temporary host-key
 files are removed; no Eve registry is modified. Cleanup failure is an error,
 never a claimed clean run. After lost connectivity or SIGKILL, an operator must
 reconcile the printed qualified identity; no process can guarantee remote cleanup
@@ -204,3 +218,10 @@ observations; this provider does not invent new FSM restoration/transition
 semantics for them. Durable in-flight restoration and richer observation-driven
 transitions remain dependent on the agreed released Determa contract. No claim
 is made that unreleased Determa 0.3.0 capabilities are implemented.
+
+
+The deletion power check uses the official client's `query` command. Incus 7.0
+rejects the global `--project` flag on that command, so the wrapper accepts only
+`<remote>:/1.0/instances/<owned-name>/state?project=<configured-project>`.
+It cannot query another path or omit the project. All other calls keep the flag.
+See [the official query implementation](https://github.com/lxc/incus/blob/v7.0.0/cmd/incus/query.go).

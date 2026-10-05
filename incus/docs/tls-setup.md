@@ -1,4 +1,7 @@
-# Restricted Incus 7.0 LTS client setup
+# Restricted Incus 7.0 LTS client setup — local pool example
+
+The values here describe `pool.example.yaml`; generic provider configuration
+requires an explicit endpoint, remote, non-default project, and subnet.
 
 These are **manual administrator/controller steps**, not automated provider
 bootstrap. Do not run them through Codex against ignored credentials. Lifecycle

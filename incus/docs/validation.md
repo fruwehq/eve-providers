@@ -111,3 +111,58 @@ reconciliation remain dependent on the agreed released Determa contract.
 * `incus/tests/test_provider.py`
 * `tests/test-incus`
 * `tests/test-incus-live`
+
+## Review fixes — 2026-10-05 (Asia/Tokyo)
+
+The review revision starts from core `4282c0e` and providers `1576c8b`.
+
+* Safe absolute and home-relative SCP paths now accept the actual core
+  provisioning uploads (`provision/` and `provision/state/`). An integration
+  regression executes `provision_ubuntu` and routes its six real uploads through
+  the Incus SSH transport; hostile destinations fail before upload.
+* Core wheels explicitly include runtime assets. `python scripts/test-wheel`
+  builds a wheel, installs it into a fresh venv outside the checkout, and verifies
+  CLI help, positive/negative command validation, all runtime schemas, FSM,
+  configuration, scripts, TUI, and shipped OS assets. This passes and runs in
+  both core CI matrix jobs; source-only validation no longer masks packaging.
+* Running observations carry authenticated access. Failed observations retain
+  their raw status and use the existing error presentation; running/provisioned
+  history cannot enable actions after an observed failure. Refresh replaces
+  bindings and clears binding/address on non-running or failed refreshes.
+  Validation consumes the exact status object selected for persistence.
+* Identity now uses a closed provider-discriminated envelope. Incus fields live
+  under its `identity` variant. SSH host identity supports an explicit configured
+  fingerprint or the namespaced Incus authenticated-exec mechanism. OS account
+  names are not restricted to lowercase Unix names.
+* Deletion checks actual power after scope/type/ownership verification. Error
+  alone never means stopped. Confirmed running/frozen power is stopped before
+  deletion. Cleanup retries transient observations within a deadline, caps each
+  client timeout at the remaining budget, and names the qualified resource if
+  absence cannot be established. Incus 7.0 rejects `--project` on `query`; the
+  guarded state URL includes `?project=<configured-project>` explicitly and
+  accepts no other path. Other calls retain the project flag.
+* Creation requires a preloaded immutable fingerprint and verifies Incus's
+  `volatile.base_image` on reconciliation. Mutable aliases and fingerprint drift
+  are rejected. Pool endpoint/remote/project/subnet values have moved from
+  generic defaults to `pool.example.yaml`; generic project configuration accepts
+  explicit non-default projects authorized by the restricted client identity.
+
+Final validation: **536 core Python tests passed, 1 intentional skip**, excluding
+only the 20-test TUI smoke file; **27 focused core contract tests passed**;
+all **16 non-Python suite groups passed**; **122 Incus offline tests passed**;
+other provider entrypoints and all 8 environment contracts passed;
+**48-plugin cross-repository conformance passed with 0 failures**;
+actual Linux and PowerShell provision runners, schema tests, Ruff/type checks,
+formatting, and offline CI pipeline checks passed. PowerShell used temporary
+XDG cache/config/data directories because the Cloud home directory is read-only.
+
+The complete core Python invocation was attempted: lint/type checks and 523
+Python tests passed before it stalled at the unchanged TUI smoke file and was
+interrupted. The isolated TUI smoke run also exited 124 at 120 seconds. The
+previous untouched-baseline reproducer remains documented above; a completely
+green full suite is not claimed and no test configuration disables that file.
+
+Live testing remains explicitly skipped. No private-pool access, TLS enrollment,
+live resource operation, Determa dependency/FSM/adapter/restoration change, or
+unreleased capability was introduced. New CI must be evaluated on the pushed
+review-fix commits independently of earlier results.

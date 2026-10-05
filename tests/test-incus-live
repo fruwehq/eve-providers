@@ -16,6 +16,7 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1] / "incus"
+POOL_EXAMPLE = yaml.safe_load((ROOT / "pool.example.yaml").read_text())
 spec = importlib.util.spec_from_file_location("incus_provider", ROOT / "provider.py")
 assert spec and spec.loader
 provider_module = importlib.util.module_from_spec(spec)
@@ -48,9 +49,9 @@ def main(argv: list[str]) -> int:
     if (
         not isinstance(data, dict)
         or data.get("endpoint") != args.target
-        or args.target != provider_module.DEFAULTS["config"]["endpoint"]
-        or data.get("remote") != "eve-incus-pool"
-        or data.get("project") != "eve-ci"
+        or args.target != POOL_EXAMPLE["endpoint"]
+        or data.get("remote") != POOL_EXAMPLE["remote"]
+        or data.get("project") != POOL_EXAMPLE["project"]
     ):
         parser.error(
             "live test must explicitly target eve-incus-pool / eve-ci at its configured endpoint"
@@ -153,11 +154,7 @@ def main(argv: list[str]) -> int:
         return 0
     finally:
         try:
-            provider.lifecycle("down")
-            if provider.observe() is not None:
-                raise provider_module.IncusError(
-                    "Live instance cleanup did not establish absence"
-                )
+            provider.cleanup()
         finally:
             signal.signal(signal.SIGTERM, previous)
         # No image import/delete, key generation, client-config mutation, or

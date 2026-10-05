@@ -1,7 +1,8 @@
-# Provider-owned defaults. No controller credential paths have defaults.
+# Generic defaults only; pool selectors and credential references are explicit.
 bootstrap:
   package_update: true
-  packages: [openssh-server]
+  packages:
+  - openssh-server
   port: 22
   protocol: ssh
   service: ssh
@@ -9,14 +10,10 @@ bootstrap:
   version: 2
 config:
   command_timeout: 120
-  endpoint: https://192.168.1.108:8443
-  image: images:ubuntu/26.04/cloud
-  instance_prefix: eve-ci
+  instance_prefix: eve
   nic: eth0
-  project: eve-ci
-  remote: eve-incus-pool
-  subnet: 10.201.153.0/24
 live:
+  cleanup_timeout: 120
   poll_interval: 2
   ssh_timeout: 300
 machine:

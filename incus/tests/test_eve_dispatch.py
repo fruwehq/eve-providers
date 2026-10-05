@@ -65,6 +65,7 @@ else:
     if op == "init":
         assert not rows
         document = yaml.safe_load(sys.stdin.read())
+        document["config"]["volatile.base_image"] = sys.argv[4].split(":",1)[1]
         rows = [document | {"name": target.split(":",1)[1], "project": "eve-ci", "type": "container", "status": "Stopped", "status_code": 102}]
     elif op in {"start", "stop"}:
         rows[0].update(status="Running" if op == "start" else "Stopped",status_code=103 if op == "start" else 102)
@@ -106,7 +107,7 @@ else:
         assert code == 0
         output = json.loads("".join(outputs))
         assert output["status"] == expected
-        assert output["provider_identity"]["project"] == "eve-ci"
+        assert output["provider_identity"]["identity"]["project"] == "eve-ci"
         assert PUBLIC not in json.dumps(output)
         if command == "access":
             assert output["guest_access"]["username"] == "ubuntu"

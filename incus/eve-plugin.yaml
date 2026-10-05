@@ -87,20 +87,19 @@ config_schema:
       type: string
       env_var: EVE_INCUS_ENDPOINT
       description: Verified HTTPS endpoint; must exactly match the configured remote.
-      default: https://192.168.1.108:8443
       required: true
     image:
       type: string
       env_var: EVE_INCUS_IMAGE
-      description: Explicit image reference. Live tests require a preloaded fingerprint
-        on the configured remote.
-      default: images:ubuntu/26.04/cloud
+      description: Immutable preloaded image fingerprint on the explicitly configured
+        remote.
+      required: true
     instance_prefix:
       type: string
       env_var: EVE_INCUS_INSTANCE_PREFIX
       description: Validated prefix for owned instances; combined with instance name
         and run UUID.
-      default: eve-ci
+      default: eve
     nic:
       type: string
       env_var: EVE_INCUS_NIC
@@ -109,8 +108,8 @@ config_schema:
     project:
       type: string
       env_var: EVE_INCUS_PROJECT
-      description: Restricted project. This provider is confined to eve-ci.
-      default: eve-ci
+      description: Explicit project authorized by the restricted client certificate;
+        never the default project.
       required: true
     public_key_file:
       type: path
@@ -122,7 +121,6 @@ config_schema:
       type: string
       env_var: EVE_INCUS_REMOTE
       description: Explicit TLS Incus remote name; never the default or local remote.
-      default: eve-incus-pool
       required: true
     run_id:
       type: string
@@ -140,7 +138,7 @@ config_schema:
       type: string
       env_var: EVE_INCUS_SUBNET
       description: Expected routed guest IPv4 subnet.
-      default: 10.201.153.0/24
+      required: true
 supports:
   engines:
   - incus

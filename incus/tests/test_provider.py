@@ -88,15 +88,26 @@ class FakeIncus:
 
     def __call__(self, cmd, **kwargs):
         self.calls.append((cmd, kwargs))
-        assert cmd[:3] == ["incus", "--project", "eve-ci"]
+        query = cmd[1] == "query"
+        if query:
+            assert cmd == [
+                "incus",
+                "query",
+                self.provider.remote
+                + ":/1.0/instances/"
+                + self.provider.name
+                + "/state?project=eve-ci",
+            ]
+        else:
+            assert cmd[:3] == ["incus", "--project", "eve-ci"]
         assert kwargs["env"]["INCUS_CONF"] == self.provider.config["config_dir"]
-        assert kwargs["timeout"] == self.provider.config["command_timeout"]
+        assert 0 < kwargs["timeout"] <= self.provider.config["command_timeout"]
         assert kwargs["capture_output"] and not kwargs.get("shell")
         assert (
             "AWS_ACCESS_KEY_ID" not in kwargs["env"]
             and "SSH_AUTH_SOCK" not in kwargs["env"]
         )
-        op = cmd[3]
+        op = "query" if query else cmd[3]
         if self.timeout:
             raise subprocess.TimeoutExpired(
                 cmd, 1, output=PUBLIC, stderr="credential-leak"
@@ -114,6 +125,9 @@ class FakeIncus:
                 "--no-profiles",
             ]
             document = yaml.safe_load(kwargs["input"])
+            document["config"]["volatile.base_image"] = self.provider.config[
+                "image"
+            ].split(":", 1)[1]
             self.rows = [
                 document
                 | {
@@ -125,7 +139,10 @@ class FakeIncus:
                 }
             ]
         elif op in {"start", "stop"}:
-            assert cmd[4:] == [self.provider.target]
+            assert cmd[4:] in [
+                [self.provider.target],
+                [self.provider.target, "--force"],
+            ]
             self.rows[0].update(
                 status="Running" if op == "start" else "Stopped",
                 status_code=103 if op == "start" else 102,
@@ -146,6 +163,20 @@ class FakeIncus:
         elif op == "delete":
             assert cmd[4:] == [self.provider.target]
             self.rows = []
+        elif op == "query":
+            assert (
+                cmd[4]
+                == self.provider.remote
+                + ":/1.0/instances/"
+                + self.provider.name
+                + "/state?project=eve-ci"
+            )
+            out = json.dumps(
+                {
+                    "status": self.rows[0]["status"],
+                    "status_code": self.rows[0]["status_code"],
+                }
+            )
         elif op == "exec":
             assert cmd[4:] == [
                 self.provider.target,
@@ -268,7 +299,7 @@ def test_bootstrap_drift_is_not_retrofitted(boundary, drift):
 )
 def test_observed_state_mapping(boundary, code, text, expected):
     provider, fake = boundary
-    provider.lifecycle("init")
+    provider.lifecycle("up")
     fake.rows[0].update(status_code=code, status=text)
     assert provider.lifecycle("status")["status"] == expected
     if expected in {"creating", "unknown", "failed"}:
@@ -319,7 +350,7 @@ def test_address_and_authenticated_binding(boundary):
         "path": provider.config["ssh_private_key_file"],
         "type": "ssh-private-key-file",
     }
-    assert binding["host_identity"]["mechanism"] == "provider-authenticated-exec"
+    assert binding["host_identity"]["mechanism"] == "incus-authenticated-exec"
     assert binding["provider_identity"] == provider.identity
     assert key == PUBLIC
     assert PUBLIC not in json.dumps(binding) and "guest-comment" not in json.dumps(
@@ -589,3 +620,245 @@ def test_missing_malformed_or_ambiguous_host_identity_rejected(boundary, key):
     ):
         with pytest.raises(p.IncusError):
             provider.access()
+
+
+@pytest.mark.parametrize(
+    "destination",
+    [
+        "../escape",
+        "provision/../escape",
+        "./provision/",
+        "/tmp/../etc",
+        "-option",
+        "host:path",
+        "provision/;true",
+        "$HOME/provision/",
+        "provision//state",
+        "provision/$(true)",
+    ],
+)
+def test_scp_rejects_unsafe_destinations(boundary, destination):
+    provider, _fake = boundary
+    provider.lifecycle("up")
+    with pytest.raises(p.IncusError):
+        provider.ssh(["--scp", "/tmp/payload", destination])
+
+
+def test_actual_core_provision_upload_arguments(boundary, monkeypatch):
+    import importlib.machinery
+    from eve_sdk.workdir import Workdir
+
+    core = Workdir.repo_root()
+    loader = importlib.machinery.SourceFileLoader(
+        "incus_core_provision", str(core / "scripts/provision")
+    )
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    module = importlib.util.module_from_spec(spec)
+    loader.exec_module(module)
+    provider, fake = boundary
+    provider.lifecycle("up")
+    uploads = []
+
+    def run(cmd, **kwargs):
+        if cmd[0] == "incus":
+            return fake(cmd, **kwargs)
+        if cmd[0] in {"ssh", "scp"}:
+            if cmd[0] == "scp":
+                uploads.append(cmd[-1])
+                assert Path(cmd[-2]).exists()
+            return subprocess.CompletedProcess(cmd, 0, "")
+        if "--scp" in cmd:
+            offset = cmd.index("--scp")
+            return subprocess.CompletedProcess(cmd, provider.ssh(cmd[offset:]), "")
+        if Path(cmd[0]).name == "plugin-list":
+            return subprocess.CompletedProcess(cmd, 0, '{"plugins": []}')
+        return subprocess.CompletedProcess(cmd, 0, "")
+
+    monkeypatch.setattr(p.subprocess, "run", run)
+    monkeypatch.setattr(
+        module, "_selected_package_environment", lambda *args: ([], {"TIMEZONE": "UTC"})
+    )
+    monkeypatch.setattr(
+        module.PluginManifest,
+        "os_provision_dir",
+        lambda *args: ROOT.parent / "oses/ubuntu-26.04/provision",
+    )
+    assert (
+        module.provision_ubuntu(
+            "test-one",
+            {"OS_FAMILY": "ubuntu", "OS_ID": "ubuntu-26.04-amd64", "PROVIDER": "incus"},
+            core,
+        )
+        == 0
+    )
+    assert uploads[0].endswith(":provision/")
+    assert len(uploads) == 6
+    assert all(dest.endswith(":provision/state/") for dest in uploads[1:])
+
+
+def test_alias_and_base_image_drift_rejected(boundary):
+    provider, fake = boundary
+    provider.lifecycle("init")
+    data = resolved()
+    data["provider_config"] = provider.config | {"image": "images:ubuntu/26.04/cloud"}
+    with pytest.raises(p.IncusError):
+        p.configuration(data)
+    fake.rows[0]["config"]["volatile.base_image"] = "b" * 64
+    with pytest.raises(p.IncusError):
+        provider.lifecycle("up")
+    assert not any(call[0][3] == "start" for call in fake.calls)
+
+
+def test_failed_but_running_uses_actual_power_before_delete(boundary, monkeypatch):
+    provider, fake = boundary
+    provider.lifecycle("up")
+    fake.rows[0].update(status="Error", status_code=112)
+    powers = iter(["running", "stopped"])
+    monkeypatch.setattr(provider, "power_state", lambda: next(powers))
+    assert provider.lifecycle("down")["status"] == "absent"
+    operations = [call[0] for call in fake.calls]
+    forced = operations.index(
+        ["incus", "--project", "eve-ci", "stop", provider.target, "--force"]
+    )
+    deletion = operations.index(
+        ["incus", "--project", "eve-ci", "delete", provider.target]
+    )
+    assert forced < deletion
+
+
+@pytest.mark.parametrize(
+    "status,code", [("Starting", 106), ("Stopping", 107), ("Frozen", 110)]
+)
+def test_cleanup_retries_transient_instance(boundary, monkeypatch, status, code):
+    provider, fake = boundary
+    provider.lifecycle("init")
+    fake.rows[0].update(status=status, status_code=code)
+    monkeypatch.setattr(provider, "power_state", lambda: "unknown")
+
+    def settle(_seconds):
+        fake.rows[0].update(status="Stopped", status_code=102)
+
+    monkeypatch.setattr(p.time, "sleep", settle)
+    provider.cleanup()
+    assert fake.rows == []
+
+
+def test_cleanup_reports_qualified_identity_after_deadline(boundary, monkeypatch):
+    provider, fake = boundary
+    provider.lifecycle("init")
+    fake.fail = "list"
+    times = iter([0, 1000])
+    monkeypatch.setattr(p.time, "monotonic", lambda: next(times, 1000))
+    with pytest.raises(p.IncusError, match=provider.target + " project=eve-ci"):
+        provider.cleanup()
+    assert fake.rows
+
+
+def test_running_observation_contains_authenticated_access(boundary):
+    provider, _fake = boundary
+    provider.lifecycle("up")
+    output = provider.lifecycle("status")
+    assert (
+        output["guest_access"]["host_identity"]["mechanism"]
+        == "incus-authenticated-exec"
+    )
+    provider.lifecycle("stop")
+    assert "guest_access" not in provider.lifecycle("status")
+
+
+def test_provider_failure_refresh_clears_binding_and_disables_actions(
+    boundary, tmp_path, monkeypatch
+):
+    import importlib.machinery
+    from eve_sdk.state import State
+    from eve_sdk.state_machine import (
+        provider_actions_available,
+        status_with_observed_state,
+    )
+    from eve_sdk.workdir import Workdir
+
+    loader = importlib.machinery.SourceFileLoader(
+        "incus_observation", str(Workdir.repo_root() / "scripts/instance-observe")
+    )
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    observer = importlib.util.module_from_spec(spec)
+    loader.exec_module(observer)
+    monkeypatch.setenv("EVE_HOME", str(tmp_path))
+    provider, fake = boundary
+    provider.lifecycle("up")
+    State.update_observed(
+        "test-one",
+        observer.parse_status_output(json.dumps(provider.lifecycle("status"))),
+    )
+    fake.rows[0].update(status="Error", status_code=112)
+    raw = json.dumps(provider.lifecycle("status"))
+    parsed = observer.parse_status_output(raw) | {"provider_status_raw": raw}
+    state = State.update_observed("test-one", parsed)
+    assert "guest_access" not in state["observed_state"]
+    assert "failed" in state["observed_state"]["provider_status_raw"]
+    rendered = status_with_observed_state(
+        {
+            "state": {
+                "provider_state": "running",
+                "desired_state": "running",
+                "provision_state": "provisioned",
+            }
+        },
+        state,
+    )
+    assert rendered["state"]["provider_state"] == "error"
+    assert not provider_actions_available(rendered["state"])
+
+
+@pytest.mark.parametrize("code,status", [(103, "Running"), (110, "Frozen")])
+def test_failed_power_query_is_scoped_and_stop_precedes_delete(
+    boundary, monkeypatch, code, status
+):
+    provider, fake = boundary
+    provider.lifecycle("init")
+    fake.rows[0].update(status="Error", status_code=112)
+    powers = iter([(code, status), (102, "Stopped")])
+    queries = []
+
+    def run(cmd, **kwargs):
+        if cmd[1] == "query":
+            queries.append(cmd)
+            assert cmd == [
+                "incus",
+                "query",
+                provider.remote
+                + ":/1.0/instances/"
+                + provider.name
+                + "/state?project=eve-ci",
+            ]
+            power_code, power_status = next(powers)
+            return subprocess.CompletedProcess(
+                cmd,
+                0,
+                json.dumps({"status_code": power_code, "status": power_status}),
+                "",
+            )
+        return fake(cmd, **kwargs)
+
+    monkeypatch.setattr(p.subprocess, "run", run)
+    assert provider.lifecycle("down")["status"] == "absent"
+    assert len(queries) == 2
+    assert [call[0][3] for call in fake.calls][-3:] == ["stop", "delete", "list"]
+
+
+@pytest.mark.parametrize(
+    "suffix",
+    [
+        "/state",
+        "/state?project=default",
+        "/state?project=other",
+        "/snapshots?project=eve-ci",
+    ],
+)
+def test_raw_query_cannot_escape_verified_instance_project(boundary, suffix):
+    provider, fake = boundary
+    with pytest.raises(p.IncusError, match="unqualified"):
+        provider.call(
+            "query", provider.remote + ":/1.0/instances/" + provider.name + suffix
+        )
+    assert not fake.calls

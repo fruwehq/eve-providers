@@ -207,7 +207,7 @@ def test_live_runner_cleans_owned_resource_on_success_and_creation_failure(
     config_path.write_text(
         yaml.safe_dump(
             {
-                "endpoint": module.provider_module.DEFAULTS["config"]["endpoint"],
+                "endpoint": "https://192.168.1.108:8443",
                 "remote": "eve-incus-pool",
                 "project": "eve-ci",
                 "image": "eve-incus-pool:" + image,
@@ -245,6 +245,9 @@ def test_live_runner_cleans_owned_resource_on_success_and_creation_failure(
                 "status": {"down": "absent", "stop": "stopped"}.get(command, "running")
             }
 
+        def cleanup(self):
+            self.lifecycle("down")
+
         def ssh(self, args):
             return 0
 
@@ -261,7 +264,7 @@ def test_live_runner_cleans_owned_resource_on_success_and_creation_failure(
         "--prefix",
         "eve-it-a1",
         "--target",
-        module.provider_module.DEFAULTS["config"]["endpoint"],
+        "https://192.168.1.108:8443",
     ]
     if fail_after_create:
         with pytest.raises(module.provider_module.IncusError):

@@ -18,7 +18,7 @@ def config(tmp_path: Path) -> dict:
             {
                 "remotes": {
                     "eve-incus-pool": {
-                        "addr": p.DEFAULTS["config"]["endpoint"],
+                        "addr": "https://192.168.1.108:8443",
                         "auth_type": "tls",
                         "project": "eve-ci",
                         "protocol": "incus",
@@ -32,6 +32,12 @@ def config(tmp_path: Path) -> dict:
     pub = tmp_path / "controller.pub"
     pub.write_text(PUBLIC + " comment-not-exported\n")
     return p.DEFAULTS["config"] | {
+        "endpoint": "https://192.168.1.108:8443",
+        "instance_prefix": "eve-ci",
+        "image": "eve-incus-pool:" + "a" * 64,
+        "project": "eve-ci",
+        "remote": "eve-incus-pool",
+        "subnet": "10.201.153.0/24",
         "config_dir": str(directory),
         "public_key_file": str(pub),
         "run_id": "0bca1721-1e2f-4ec3-b243-ef668bd20b2d",
