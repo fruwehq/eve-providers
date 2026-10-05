@@ -1,0 +1,102 @@
+#!/usr/bin/env python3
+"""Validate provider environment declarations used by Eve's strict dispatch boundary."""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+from typing import Any
+
+import yaml
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def env_names(spec: dict[str, Any]) -> list[str]:
+    value = spec.get("env_var")
+    if isinstance(value, list):
+        return [str(name) for name in value]
+    return [str(value)] if value else []
+
+
+failures: list[str] = []
+manifests: dict[str, dict[str, Any]] = {}
+
+for path in sorted(ROOT.glob("*/eve-plugin.yaml")):
+    manifest = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if manifest.get("kind") != "provider":
+        continue
+    plugin_id = str(manifest["id"])
+    manifests[plugin_id] = manifest
+    declared = [str(name) for name in manifest.get("env", [])]
+    if declared != sorted(set(declared)):
+        failures.append(f"{plugin_id}: top-level env must be sorted and unique")
+
+    schema = manifest.get("config_schema") or {}
+    mapped = {
+        name
+        for section in ("config", "secrets")
+        for spec in (schema.get(section) or {}).values()
+        if isinstance(spec, dict)
+        for name in env_names(spec)
+    }
+    missing = sorted(mapped - set(declared))
+    if missing:
+        failures.append(
+            f"{plugin_id}: config_schema env_var missing from top-level env: "
+            + ", ".join(missing)
+        )
+
+    for secret_name, spec in (schema.get("secrets") or {}).items():
+        if not isinstance(spec, dict) or not env_names(spec):
+            failures.append(
+                f"{plugin_id}: secret {secret_name} needs env_var for strict dispatch injection"
+            )
+
+    sudo_env = (manifest.get("bootstrap") or {}).get("sudo_password_env")
+    if sudo_env:
+        secret_env = {
+            name
+            for spec in (schema.get("secrets") or {}).values()
+            if isinstance(spec, dict)
+            for name in env_names(spec)
+        }
+        if sudo_env not in secret_env:
+            failures.append(
+                f"{plugin_id}: bootstrap.sudo_password_env {sudo_env} is not mapped by a secret"
+            )
+
+expected = {
+    "gcp": {"oauth_access_token": "GOOGLE_OAUTH_ACCESS_TOKEN"},
+    "raspberry-pi": {"user_password": "RASPBERRY_PI_USER_PASSWORD"},
+    "truenas": {"api_key": "TRUENAS_API_KEY"},
+}
+
+aws = manifests["aws"]
+aws_schema = aws.get("config_schema") or {}
+for name in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN"):
+    if name in aws.get("env", []) or name in yaml.safe_dump(aws_schema):
+        failures.append(f"aws: removed credential environment variable {name} is declared")
+if "secrets" in aws_schema:
+    failures.append("aws: Eve-managed secret fields must not be declared")
+profile = (aws_schema.get("config") or {}).get("profile") or {}
+if profile.get("env_var") != "AWS_PROFILE" or profile.get("required") is not True:
+    failures.append("aws: explicit named profile must map to AWS_PROFILE and be required")
+if "AWS_PROFILE" not in aws.get("env", []):
+    failures.append("aws: AWS_PROFILE must be declared in the command environment")
+
+for plugin_id, mappings in expected.items():
+    secrets = (manifests[plugin_id].get("config_schema") or {}).get("secrets") or {}
+    for secret_name, expected_env in mappings.items():
+        actual = env_names(secrets.get(secret_name) or {})
+        if actual != [expected_env]:
+            failures.append(
+                f"{plugin_id}: secret {secret_name} must map to {expected_env}, got {actual}"
+            )
+
+if failures:
+    for failure in failures:
+        print(f"[FAIL] {failure}", file=sys.stderr)
+    raise SystemExit(1)
+
+print(f"[OK] provider environment contracts ({len(manifests)} manifests)")

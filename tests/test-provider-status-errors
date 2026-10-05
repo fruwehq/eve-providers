@@ -1,0 +1,160 @@
+#!/usr/bin/env python3
+"""Provider status must distinguish absent state from backend/API failures."""
+
+from __future__ import annotations
+
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+class ProviderStatusErrors(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory(prefix="eve-provider-status.")
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.bin = self.root / "bin"
+        self.bin.mkdir()
+        self.env = {"PATH": f"{self.bin}:{os.environ['PATH']}"}
+
+    def executable(self, name: str, body: str) -> None:
+        path = self.bin / name
+        path.write_text("#!/usr/bin/env bash\n" + body + "\n")
+        path.chmod(0o755)
+
+    def state_probe(self) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["bash", "-c", '. "$1"; eve_tf_state_json test candidate', "probe",
+             str(ROOT / "_common/lib/tf-state.sh")],
+            cwd=self.root, env=self.env, capture_output=True, text=True,
+        )
+
+    def test_missing_explicit_state_is_absent_without_backend_access(self) -> None:
+        self.env["EVE_TF_STATE_BASE"] = str(self.root / "state")
+        self.executable("terramate", "echo unexpected-backend >&2; exit 42")
+        result = self.state_probe()
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, "")
+        self.assertEqual(result.stderr, "")
+
+    def test_generation_failure_propagates(self) -> None:
+        self.executable("terramate", "echo generation-failed >&2; exit 23")
+        result = self.state_probe()
+        self.assertEqual(result.returncode, 23)
+        self.assertIn("generation-failed", result.stderr)
+
+    def test_backend_failure_propagates(self) -> None:
+        self.executable("terramate", 'if [ "$1" = generate ]; then exit 0; fi; echo access-denied >&2; exit 42')
+        result = self.state_probe()
+        self.assertEqual(result.returncode, 42)
+        self.assertIn("access-denied", result.stderr)
+
+    def test_invalid_backend_json_is_an_error(self) -> None:
+        self.executable("terramate", 'if [ "$1" = generate ]; then exit 0; fi; echo invalid-json')
+        result = self.state_probe()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Cannot parse", result.stderr)
+
+    def test_aws_api_error_is_not_reported_as_absence(self) -> None:
+        subprocess.run(["git", "init", "-q", str(self.root)], check=True)
+        commands = self.root / "aws/commands"
+        shared = self.root / "_common/lib"
+        scripts = self.root / "scripts"
+        for path in [commands, shared, scripts]:
+            path.mkdir(parents=True)
+        shutil.copy2(ROOT / "aws/commands/status", commands / "status")
+        shutil.copy2(ROOT / "_common/lib/tf-state.sh", shared / "tf-state.sh")
+        (shared / "profile-env.sh").write_text(
+            "eve_load_profile_env() { ENGINE=terraform; PROVIDER=aws; OS_FAMILY=ubuntu; TAGS=test; }\n"
+        )
+        (scripts / "tf-env").write_text("#!/usr/bin/env bash\nexit 0\n")
+        (scripts / "tf-env").chmod(0o755)
+        state = self.root / "state/plugins/providers/aws/stacks/20-services/default.tfstate"
+        state.parent.mkdir(parents=True)
+        state.write_text(
+            '{"resources":[{"type":"aws_instance","name":"main",'
+            '"instances":[{"attributes":{"id":"i-fake","instance_state":"running"}}]}]}'
+        )
+        self.env["AWS_PROFILE"] = "test-profile"
+        self.env["EVE_TF_STATE_BASE"] = str(self.root / "state")
+        self.executable("aws", "echo simulated-access-denied >&2; exit 42")
+        result = subprocess.run(
+            [str(commands / "status"), "test"], cwd=self.root,
+            env=self.env, capture_output=True, text=True,
+        )
+        self.assertEqual(result.returncode, 42)
+        self.assertIn("simulated-access-denied", result.stderr)
+        self.assertNotIn("absent", result.stdout)
+
+
+    def test_aws_commands_reject_missing_profile_before_backend_access(self) -> None:
+        subprocess.run(["git", "init", "-q", str(self.root)], check=True)
+        commands = self.root / "aws/commands"
+        shared = self.root / "_common/lib"
+        scripts = self.root / "scripts/lib"
+        for path in [commands, shared, scripts]:
+            path.mkdir(parents=True)
+        shutil.copy2(ROOT / "_common/lib/tf-state.sh", shared / "tf-state.sh")
+        (shared / "profile-env.sh").write_text("eve_load_profile_env() { :; }\n")
+        (scripts / "load-runtime-env.sh").write_text(":\n")
+        self.executable("aws", "echo unexpected-aws-call; exit 99")
+        self.executable("terramate", "echo unexpected-backend-call; exit 99")
+        for command in ("ip", "start", "status", "stop"):
+            with self.subTest(command=command):
+                shutil.copy2(ROOT / "aws/commands" / command, commands / command)
+                result = subprocess.run(
+                    [str(commands / command), "test"], cwd=self.root,
+                    env=self.env, capture_output=True, text=True,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("explicit named AWS profile", result.stderr)
+                self.assertNotIn("unexpected", result.stdout)
+
+    def test_aws_tf_env_requires_profile(self) -> None:
+        self.env["EVE_TF_ENV_JSON"] = "{}"
+        for profile in ("", "test-profile"):
+            with self.subTest(profile=profile):
+                result = subprocess.run(
+                    [sys.executable, str(ROOT / "aws/commands/tf-env")],
+                    env=self.env | {"AWS_PROFILE": profile}, capture_output=True, text=True,
+                )
+                if profile:
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertIn("TF_VAR_region", result.stdout)
+                else:
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("explicit named AWS profile", result.stderr)
+                    self.assertEqual(result.stdout, "")
+
+    def test_tf_env_failure_aborts_shared_commands(self) -> None:
+        subprocess.run(["git", "init", "-q", str(self.root)], check=True)
+        commands = self.root / "commands"
+        scripts = self.root / "scripts"
+        commands.mkdir()
+        scripts.mkdir()
+        (scripts / "profile-resolve").write_text(
+            "#!/usr/bin/env bash\nprintf 'ENGINE=terraform\\nSTACK_TAGS=test\\n'\n"
+        )
+        (scripts / "tf-env").write_text("#!/usr/bin/env bash\nexit 23\n")
+        for path in scripts.iterdir():
+            path.chmod(0o755)
+        self.executable("terramate", 'if [ "$1" = generate ]; then exit 0; fi; echo unexpected-backend-call; exit 99')
+        for command in ("down", "init", "plan", "up"):
+            with self.subTest(command=command):
+                shutil.copy2(ROOT / "_terraform-common/commands" / command, commands / command)
+                result = subprocess.run(
+                    [str(commands / command), "test"], cwd=self.root,
+                    env=self.env, capture_output=True, text=True,
+                )
+                self.assertEqual(result.returncode, 23, result.stdout + result.stderr)
+                self.assertNotIn("unexpected", result.stdout)
+
+
+if __name__ == "__main__":
+    unittest.main()

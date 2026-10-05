@@ -56,7 +56,8 @@ config_schema:
     profile:
       type: string
       env_var: AWS_PROFILE
-      description: "AWS CLI/SSO profile name used by Terraform and the AWS Login action. If unset, the default profile / ambient AWS environment is used. Example: my-sso-profile."
+      required: true
+      description: "An explicit named AWS profile is required for Terraform and AWS CLI commands. AWS tooling manages the profile's credentials and login/SSO session. Example: my-sso-profile."
     region:
       type: string
       default: "us-east-1"
@@ -67,13 +68,6 @@ config_schema:
       default: "~/.aws/credentials"
       env_var: AWS_SHARED_CREDENTIALS_FILE
       description: "Path to the AWS CLI credentials file used by Terraform. Default: ~/.aws/credentials. Leave unset to use that default."
-  secrets:
-    access_key_id:
-      type: string
-      description: "Static AWS access key ID (AWS_ACCESS_KEY_ID). OPTIONAL — leave unset to authenticate via your profile / SSO / environment / instance role (recommended). Set only for static-key auth; if set it overrides the profile. Example: AKIA..."
-    secret_access_key:
-      type: string
-      description: "Static AWS secret access key (AWS_SECRET_ACCESS_KEY). OPTIONAL — required only if access_key_id is set; otherwise leave unset to use your profile / SSO. Treat as a secret."
 supports:
   engines: [terraform]
   kinds: [vm]

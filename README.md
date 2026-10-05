@@ -1,7 +1,11 @@
 # eve-providers
 
 The first-party **eve** providers, **one independent subfolder per provider**:
-`aws`, `gcp`, `vultr`, `truenas`, `raspberry-pi`, `local-qemu`, and `docker`.
+`aws`, `docker`, `gcp`, `incus`, `local-qemu`, `raspberry-pi`, `truenas`, and `vultr`.
+
+[Incus system containers](incus/README.md) provide routed, SSH-managed integration
+guests through a project-restricted TLS API. See the provider contract, manual
+certificate setup, and explicitly opt-in remote-pool test there.
 
 A provider owns infra stand-up and everything needed to make an instance
 **manageable** (init / cloud-init / bootstrap user; SSH, or `docker exec` for the

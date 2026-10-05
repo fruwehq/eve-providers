@@ -1,0 +1,96 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import importlib.machinery
+import importlib.util
+import io
+import json
+import os
+import sys
+import unittest
+from contextlib import redirect_stdout
+from pathlib import Path
+from types import ModuleType
+from unittest.mock import patch
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.dont_write_bytecode = True
+
+
+def load_command() -> ModuleType:
+    path = ROOT / "aws" / "commands" / "connectivity"
+    loader = importlib.machinery.SourceFileLoader("aws_connectivity", str(path))
+    spec = importlib.util.spec_from_loader("aws_connectivity", loader)
+    assert spec is not None
+    module = importlib.util.module_from_spec(spec)
+    loader.exec_module(module)
+    return module
+
+
+class AwsConnectivityTests(unittest.TestCase):
+    def run_probe(
+        self, env: dict[str, str], *, cli: bool = True, returncode: int = 1
+    ) -> dict[str, str]:
+        module = load_command()
+        output = io.StringIO()
+        command_result = type("Result", (), {"returncode": returncode})()
+        with (
+            patch.dict(os.environ, env, clear=True),
+            patch.object(module, "shutil") as shutil_mock,
+            patch.object(module, "subprocess") as subprocess_mock,
+            redirect_stdout(output),
+        ):
+            shutil_mock.which.return_value = "/usr/bin/aws" if cli else None
+            subprocess_mock.DEVNULL = module._DEVNULL
+            subprocess_mock.run.return_value = command_result
+            module.main()
+            self.aws_command = subprocess_mock.run.call_args.args[0] if subprocess_mock.run.called else None
+        parsed = json.loads(output.getvalue())
+        self.assertIsInstance(parsed, dict)
+        return parsed
+
+    def test_ambient_credentials_do_not_configure_or_invoke_aws(self) -> None:
+        result = self.run_probe({
+            "AWS_ACCESS_KEY_ID": "ignored-access",
+            "AWS_SECRET_ACCESS_KEY": "ignored-secret",
+            "AWS_SESSION_TOKEN": "ignored-token",
+        }, returncode=0)
+        self.assertEqual(result["configured"], "no")
+        self.assertEqual(result["reachable"], "no")
+        self.assertIsNone(self.aws_command)
+
+    def test_missing_cli_with_profile_is_configured_but_unreachable(self) -> None:
+        result = self.run_probe({"AWS_PROFILE": "eve"}, cli=False)
+        self.assertEqual(result["configured"], "yes")
+        self.assertEqual(result["reachable"], "no")
+        self.assertIsNone(self.aws_command)
+
+    def test_no_profile_is_unconfigured_without_invoking_aws(self) -> None:
+        result = self.run_probe({}, returncode=0)
+        self.assertEqual(result["configured"], "no")
+        self.assertEqual(result["reachable"], "no")
+        self.assertIsNone(self.aws_command)
+
+    def test_profile_failure_is_configured_but_unreachable(self) -> None:
+        result = self.run_probe({"AWS_PROFILE": "eve"})
+        self.assertEqual(result["configured"], "yes")
+        self.assertEqual(result["reachable"], "no")
+        self.assertIn("login/SSO session", result["notes"])
+        self.assertEqual(self.aws_command, ["aws", "--profile", "eve", "sts", "get-caller-identity"])
+
+    def test_profile_success_uses_explicit_name(self) -> None:
+        result = self.run_probe({"AWS_PROFILE": "eve"}, returncode=0)
+        self.assertEqual(result["configured"], "yes")
+        self.assertEqual(result["reachable"], "yes")
+        self.assertEqual(self.aws_command, ["aws", "--profile", "eve", "sts", "get-caller-identity"])
+
+    def test_region_keeps_explicit_profile(self) -> None:
+        result = self.run_probe({"AWS_PROFILE": "named-profile", "AWS_REGION": "test-region"}, returncode=0)
+        self.assertEqual(result["reachable"], "yes")
+        self.assertEqual(self.aws_command, [
+            "aws", "--region", "test-region", "--profile", "named-profile", "sts", "get-caller-identity",
+        ])
+
+
+if __name__ == "__main__":
+    unittest.main()

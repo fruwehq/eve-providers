@@ -1,0 +1,182 @@
+api_version: eve.plugin/v1
+kind: provider
+id: incus
+display_name: Incus system containers
+commands:
+  access:
+    exec: commands/incus-provider
+    args:
+    - access
+  connectivity:
+    exec: commands/incus-provider
+    args:
+    - connectivity
+  down:
+    exec: commands/incus-provider
+    args:
+    - down
+  init:
+    exec: commands/incus-provider
+    args:
+    - init
+  ip:
+    exec: commands/incus-provider
+    args:
+    - ip
+  plan:
+    exec: commands/incus-provider
+    args:
+    - plan
+  resolve:
+    exec: commands/incus-provider
+    args:
+    - resolve
+  ssh:
+    exec: commands/incus-provider
+    args:
+    - ssh
+  start:
+    exec: commands/incus-provider
+    args:
+    - start
+  status:
+    exec: commands/incus-provider
+    args:
+    - status
+  stop:
+    exec: commands/incus-provider
+    args:
+    - stop
+  up:
+    exec: commands/incus-provider
+    args:
+    - up
+  validate:
+    exec: commands/incus-provider
+    args:
+    - validate
+access:
+  ubuntu:
+    bootstrap_user:
+      value: ubuntu
+    human_user:
+      value: ubuntu
+    provision_user:
+      value: ubuntu
+capabilities:
+- host-ssh
+host_tools:
+- name: incus
+  check: incus version
+  apt: apt install incus-client
+  brew: brew install incus
+config_schema:
+  config:
+    command_timeout:
+      type: integer
+      env_var: EVE_INCUS_COMMAND_TIMEOUT
+      description: Timeout in seconds for each Incus operation.
+      default: 120
+    config_dir:
+      type: path
+      env_var: EVE_INCUS_CONFIG_DIR
+      description: Dedicated Incus client configuration directory containing the restricted
+        TLS identity and pinned server certificate.
+      required: true
+    endpoint:
+      type: string
+      env_var: EVE_INCUS_ENDPOINT
+      description: Verified HTTPS endpoint; must exactly match the configured remote.
+      required: true
+    image:
+      type: string
+      env_var: EVE_INCUS_IMAGE
+      description: Immutable preloaded image fingerprint on the explicitly configured
+        remote.
+      required: true
+    instance_prefix:
+      type: string
+      env_var: EVE_INCUS_INSTANCE_PREFIX
+      description: Validated prefix for owned instances; combined with instance name
+        and run UUID.
+      default: eve
+    nic:
+      type: string
+      env_var: EVE_INCUS_NIC
+      description: Exact guest NIC from which routed IPv4 is selected.
+      default: eth0
+    project:
+      type: string
+      env_var: EVE_INCUS_PROJECT
+      description: Explicit project authorized by the restricted client certificate;
+        never the default project.
+      required: true
+    public_key_file:
+      type: path
+      env_var: EVE_INCUS_PUBLIC_KEY_FILE
+      description: Explicit controller SSH public-key file to inject before first
+        boot.
+      required: true
+    remote:
+      type: string
+      env_var: EVE_INCUS_REMOTE
+      description: Explicit TLS Incus remote name; never the default or local remote.
+      required: true
+    run_id:
+      type: string
+      env_var: EVE_INCUS_RUN_ID
+      description: Explicit per-test-run UUID; retain it to reconcile or delete interrupted
+        operations.
+      required: true
+    ssh_private_key_file:
+      type: path
+      env_var: EVE_INCUS_SSH_PRIVATE_KEY_FILE
+      description: Explicit SSH credential reference. Never inferred from a public-key
+        filename or ambient keys.
+      required: true
+    subnet:
+      type: string
+      env_var: EVE_INCUS_SUBNET
+      description: Expected routed guest IPv4 subnet.
+      required: true
+supports:
+  engines:
+  - incus
+  kinds:
+  - container
+env:
+- EVE_INCUS_COMMAND_TIMEOUT
+- EVE_INCUS_CONFIG_DIR
+- EVE_INCUS_ENDPOINT
+- EVE_INCUS_IMAGE
+- EVE_INCUS_INSTANCE_PREFIX
+- EVE_INCUS_NIC
+- EVE_INCUS_PROJECT
+- EVE_INCUS_PUBLIC_KEY_FILE
+- EVE_INCUS_REMOTE
+- EVE_INCUS_RUN_ID
+- EVE_INCUS_SSH_PRIVATE_KEY_FILE
+- EVE_INCUS_SUBNET
+catalog:
+  inits:
+  - id: incus-cloud-init
+    os_family: ubuntu
+    providers:
+    - incus
+  locations:
+  - name: incus-pool
+    incus: {}
+  machines:
+  - name: incus-ubuntu-ci
+    provider: incus
+    kind: container
+    supports:
+      arches:
+      - amd64
+      os_ids:
+      - ubuntu-26.04-amd64
+    defaults:
+      cpu_cores: 2
+      memory_mb: 2048
+      network: incusbr0
+      pool: default

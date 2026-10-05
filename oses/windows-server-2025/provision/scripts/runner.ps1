@@ -199,12 +199,13 @@ try {
     $stepError = $null
     $stepExitCode = 0
     try {
-      # PowerShell sets $LASTEXITCODE from the last native command (exe) inside
-      # the step, which is unreliable for success/failure (e.g. powercfg returns
-      # -1 for informational messages). The only reliable signal is whether the
-      # step threw a terminating error. If the step completes without throwing,
-      # treat it as success regardless of $LASTEXITCODE or $?.
-      & $Step.FullName 2>&1 | ForEach-Object { Log $_ }
+      # A separate invocation of the current PowerShell runtime gives the step
+      # its own exit boundary. -File reports explicit exit codes and terminating
+      # errors, while normal completion succeeds even if a native tool inside
+      # the step left an informational nonzero $LASTEXITCODE.
+      $StepShell = (Get-Process -Id $PID).Path
+      & $StepShell -NoProfile -ExecutionPolicy Bypass -File $Step.FullName 2>&1 | ForEach-Object { Log $_ }
+      $stepExitCode = $LASTEXITCODE
     } catch {
       $stepError = $_
       $stepExitCode = if ($LASTEXITCODE -ne 0) { $LASTEXITCODE } else { 1 }

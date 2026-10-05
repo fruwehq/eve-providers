@@ -2,15 +2,21 @@ name: Conformance
 
 on:
   push:
-    branches: [main]
+    branches: [main, v4.5]
   pull_request:
-    branches: [main]
+    types: [opened, ready_for_review, reopened, synchronize]
+    branches: [main, v4.5]
 
 jobs:
   plugin-test:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: providers
     steps:
       - uses: actions/checkout@v5
+        with:
+          path: providers
 
       # eve is not published to PyPI yet — clone the repo for its conformance
       # harness + schema. Once eve ships, replace this step with `pip install eve`
@@ -18,13 +24,14 @@ jobs:
       - uses: actions/checkout@v5
         with:
           repository: fruwehq/eve
+          ref: ${{ (github.base_ref == 'v4.5' || github.head_ref == 'v4.5' || github.ref_name == 'v4.5') && 'v4.5' || 'main' }}
           path: eve
 
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
-      - run: pip install jsonschema pyyaml
+      - run: pip install ../eve
 
       # Run the conformance harness against every provider plugin in this repo.
       # Provider plugins live one level below the repo root (local-qemu, aws, gcp,
@@ -34,10 +41,9 @@ jobs:
       # paths) and are skipped by the `-f .../eve-plugin.yaml` guard.
       - name: plugin-test all providers
         run: |
-          for d in */; do
-            d="${d%/}"
-            [ -f "$d/eve-plugin.yaml" ] || continue
-            eve/scripts/plugin-test "$d"
+          set -e
+          git ls-files '*eve-plugin.yaml' | while IFS= read -r manifest; do
+            ../eve/scripts/plugin-test "$manifest"
           done
 
       # Host OS-portability of the raspberry-pi host-resolver helper (mocks
@@ -46,3 +52,20 @@ jobs:
       # code lives.
       - name: host-resolver OS portability
         run: python3 tests/test-host-resolver
+
+      - name: AWS configuration semantics
+        run: python3 tests/test-aws-connectivity
+
+      - name: Provider environment contracts
+        run: python3 tests/test-manifest-env-contract
+
+      - name: Incus offline lifecycle and SSH contract
+        run: |
+          pip install pytest
+          python3 tests/test-incus
+
+      - name: Status error propagation
+        run: python3 tests/test-provider-status-errors
+
+      - name: OS provisioning runner tests
+        run: ../eve/scripts/test-provision-runner --plugin-roots "$PWD/oses"

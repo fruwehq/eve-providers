@@ -1,0 +1,19 @@
+#!/usr/bin/env python3
+"""Run Incus offline tests only. Live tests are a separate explicit command."""
+
+import subprocess
+import sys
+from pathlib import Path
+
+raise SystemExit(
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "-q",
+            str(Path(__file__).resolve().parents[1] / "incus/tests"),
+        ],
+        check=False,
+    ).returncode
+)

@@ -20,6 +20,16 @@ eve_load_profile_env() {
   TAGS=$(printf "%s\n" "$RESOLVED_ENV" | awk -F= '/^STACK_TAGS=/{print $2}')
   SSH_USER=$(printf "%s\n" "$RESOLVED_ENV" | awk -F= '/^SSH_USER=/{print $2}')
   export RESOLVED_ENV ENGINE PROVIDER OS_FAMILY TAGS SSH_USER
+
+  # Read/power commands (status, ip, start, stop, password) run terramate but
+  # never tf-init, so the externalized provider stacks may not be staged where
+  # terramate can discover them (fresh checkout, or a tree where `up` hasn't
+  # run). Stage them via the shared core helper — idempotent and a no-op once
+  # staged, so it's safe on every status poll. Gated on the terraform engine;
+  # other engines (qemu, etc.) have no stacks to vendor.
+  if [ "$ENGINE" = "terraform" ] && [ -n "$PROVIDER" ]; then
+    ./scripts/tf-stage "$PROVIDER"
+  fi
 }
 
 eve_resolved_value() {

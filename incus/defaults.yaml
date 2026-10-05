@@ -1,0 +1,23 @@
+# Generic defaults only; pool selectors and credential references are explicit.
+bootstrap:
+  package_update: true
+  packages:
+  - openssh-server
+  port: 22
+  protocol: ssh
+  service: ssh
+  username: ubuntu
+  version: 2
+config:
+  command_timeout: 120
+  instance_prefix: eve
+  nic: eth0
+live:
+  cleanup_timeout: 120
+  poll_interval: 2
+  ssh_timeout: 300
+machine:
+  cpu_cores: 2
+  memory_mb: 2048
+  network: incusbr0
+  pool: default

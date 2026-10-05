@@ -24,7 +24,8 @@ echo "[tf-plan] profile=$PROFILE tags=$TAGS"
 
 terramate generate
 
-eval "$(./scripts/tf-env "$PROFILE")"
+TF_ENV=$(./scripts/tf-env "$PROFILE")
+eval "$TF_ENV"
 
 FAIL=0
 
