@@ -1,4 +1,4 @@
-# Phase-one validation — 2026-10-05 UTC
+# Phase-one validation — 2026-10-05 (Asia/Tokyo)
 
 Fresh feature branches `codex/utm-provider` were created from the fetched main
 merge commits: Eve `ec580016e5f7c9a3fc8069dd0ef0652987a0027b`, providers
@@ -50,7 +50,7 @@ temporary writable directories. No ignored personal configuration was read.
 ## Unperformed checks and blocking evidence
 
 No UTM offline provider suite exists yet: a fake transport would not establish
-the missing supported host-session or atomic-clone boundary. The manual read-only
+the missing supported host-session or atomic-clone boundary. The supervised
 Remote Login proof and future live lifecycle test were **not run**. Neither the
 Mac nor the Incus pool was contacted. No credentials, key material or personal
 infrastructure settings were added.
@@ -58,3 +58,39 @@ infrastructure settings were added.
 The feasibility report cites the pinned UTM source and existing upstream reports;
 it is not a claim of locally reproduced macOS failure. No upstream issue was
 submitted. No Determa provisional API, adapter, restoration or emulation was added.
+
+## Review revision validation — 2026-10-05 (Asia/Tokyo)
+
+Started at draft Providers #12 head
+`94efd227527d45bdf7cf5438918db3299450176a`, verified against fetched branch head.
+This revision changes documentation only. Earlier references to a read-only
+Remote Login proof are corrected: utmctl can auto-launch/hide UTM, and independent
+before/after process inspection detects but does not prevent the check/use race.
+Unavailable-app tests must fail preconditions without invoking utmctl. No static
+host-control artifact, AppleScript, schema, plugin or catalog entry is installed.
+
+Pinned official source audit covers CLI launch flags and ID-to-name fallback,
+stop's force default/request option, scripting's asynchronous dispatch, clone
+registration ordering, export bundle-copy/resource limitations, and the closed
+four-profile bootstrap matrix. Export cannot establish the required immutable
+provenance guarantees. Static strict-ID scripting remains unproven and gated.
+Two upstream drafts are prepared, neither posted. No private bundle was parsed.
+
+Fresh checks for this documentation revision:
+
+* Providers `python tests/test-incus`: **122 passed**, 37.80 seconds.
+* Providers AWS connectivity: **6 passed**; host resolver: **3 checks passed**;
+  manifest environment contract: **8 manifests passed**; status errors:
+  **8 passed**. Provider Ruff passed.
+* `../eve/scripts/test-cross-repo` with the same four companion roots:
+  **48 plugins, zero failures**; manifest/schema/conformance, dual-OS parity and
+  combined catalog composition passed.
+* `../eve/scripts/test-provision-runner --plugin-roots <providers>/oses`:
+  **all Linux and PowerShell runner checks passed**.
+* All local UTM documentation links resolve; `git diff --check` passed.
+
+No Mac, Incus pool or other live provider was accessed. The earlier full core
+suite/wheel results above are historical validation of unchanged core; they were
+not rerun for a documentation-only revision. The pre-existing TUI shutdown
+timeout is not resolved or hidden. Prior head's GitHub Conformance run
+`37324847339` succeeded; revised-head CI must be checked independently after push.

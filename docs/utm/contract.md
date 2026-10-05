@@ -55,6 +55,15 @@ meet this requirement. A provider operation must compare the full identity,
 backend, requested mutable configuration, template provenance, and actual state
 before any effect. Names are labels only.
 
+This does **not** make raw utmctl UUID arguments strict: the CLI falls back to
+display-name lookup if an ID is absent. Do not use that interface for destructive
+operations. Inventory preflight and controller serialization cannot close the
+race. Require a supported atomic strict-ID-only operation, or a static documented
+scripting operation whose exact-ID resolution/effect and returned ID verification
+are proven by source review. ID mismatch/disappearance fails closed without
+searching by name. Test an unrelated VM named as the vanished owned UUID for
+status/start/stop/delete, including disappearance after preflight.
+
 Guest access preserves the shared closed envelope: `address`, `port`,
 `protocol: ssh`, `version: 2`, `username`, `credential_reference`,
 `host_identity`, `provider_identity`. Initially use `configured-fingerprint`;
@@ -64,6 +73,11 @@ Guest exec cannot replace normal SSH package management. No copied ambient
 private keys, agent forwarding, TOFU, accept-new, or disabled certificate/pin
 verification. Cloning reusable host keys across guests is not an acceptable
 substitute for authenticated per-guest identity.
+
+Guest bootstrap is independently gated by [bootstrap-matrix.md](bootstrap-matrix.md).
+No profile is currently eligible. Prepared templates alone do not establish
+unique controller-key injection, per-clone host-key regeneration/authenticated
+discovery, NIC-to-address binding, timing or persistence.
 
 ## Observations and operation crash boundaries
 
@@ -88,6 +102,11 @@ on every non-running or failed refresh; core must not retain a stale merged bind
   ownership and template provenance before start or guest access.
 * During start/stop: success is observed final power state, not command exit alone.
   Lost response/timeout is `unknown`; retry only after identity/power reconciliation.
+  CLI bare `stop` defaults to force; normal stop must use documented `--request`
+  semantics through the eventual strict-ID boundary, then bounded observation.
+  Force/kill requires separately authorized policy, never timeout fallback.
+  Exclude the installation-cancellation path from normal stop: pinned scripting
+  can force-stop an installing macOS guest regardless of the requested method.
 * During delete: verify ownership/configuration and stopped state. Lost response
   is `unknown` until complete authenticated inventory proves absence.
 * Cleanup: bounded retry/observation, report unresolved qualified host/UUID identity;

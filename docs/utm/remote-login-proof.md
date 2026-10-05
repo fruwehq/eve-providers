@@ -1,119 +1,117 @@
-# Manual Remote Login feasibility proof (not a live provider test)
+# Manual Remote Login feasibility proof (not session-neutral)
 
-Do not run this automatically. No host was accessed or configured for this change.
-The administrator must approve the specific Mac, account, signed UTM build,
-explicit controller key and host pin before this procedure. A successful probe
-does not authorize lifecycle operations or resolve clone atomicity.
+This is a supervised proof plan, not an installed host artifact or live provider
+test. No Mac was contacted. Do not run automatically. The administrator must
+approve the exact Mac, account, signed UTM build, explicit controller key and host
+pin, including the possibility of app/session effects. Passing this proof does
+not authorize VM operations or resolve strict-ID, clone, template or bootstrap
+gates.
 
-## Preparation on the Mac
+## Auto-launch and check/use race
 
-1. Install the selected signed UTM.app and record its exact version/build and
-   macOS version. Record Apple Silicon architecture using built-in `uname -m`.
-   Check its signature with built-in `codesign --verify --deep --strict` against
-   the approved absolute app path. This is a signature integrity check, not a
-   substitute for independently verifying the trusted publisher/build.
-2. Log in to the intended UTM owner's GUI session and launch UTM. Record whether
-   the controller account is this owner or a distinct dedicated account. A
-   dedicated non-admin account that owns a dedicated UTM GUI session is preferable
-   to controlling a personal owner's session, if supported. Do not grant sudo.
-3. Enable Remote Login only for the chosen account through macOS Settings.
-   Keep password/key policy, PAM, TCC and host-key verification intact. Do not
-   enable broad Full Disk Access as an assumed workaround. Obtain the Mac's
-   Ed25519 SSH host public key and SHA256 fingerprint through an independent
-   trusted administrative channel; never trust a network key scan alone.
-4. Install a root-owned, non-account-writable, read-only probe at an explicit
-   absolute path such as `/usr/local/libexec/eve-utm-probe`. It may use `/bin/sh`
-   and invoke only the configured bundled absolute `utmctl` path. The following
-   minimal example assumes UTM.app was explicitly installed at `/Applications`;
-   change that literal for the approved installation. It is not a provider or a
-   general command dispatcher:
+Pinned `UTMAPICommand.run()` creates `SBApplication` and sets
+`launchFlags = [.defaults, .andHide]`. Calling `version` or `list` can launch UTM
+if it is not running. There is no proven no-launch flag in this CLI. Calling it
+against an unavailable app is therefore not a read-only negative test.
 
-   ```sh
-   #!/bin/sh
-   set -eu
-   case "${SSH_ORIGINAL_COMMAND-}" in
-     eve-utm-probe-v1) ;;
-     *) exit 64 ;;
-   esac
-   /Applications/UTM.app/Contents/MacOS/utmctl version
-   /Applications/UTM.app/Contents/MacOS/utmctl list
-   ```
+Before **each** invocation, independently establish that the intended GUI owner
+session and exact UTM process are already active. Verification must not itself
+send UTM AppleEvents or invoke utmctl/osascript to launch the app. Use an
+administrator's trusted local GUI observation and built-in process inspection
+(`ps` on the confirmed PID), recording owner UID, GUI login session, PID, process
+start time, executable path and approved app build. Process ownership alone does
+not prove GUI-session association. Multiple or ambiguous UTM processes fail the
+precondition. Do not infer session identity from a VM name or inventory.
 
-   Never use `eval`, `sh -c "$SSH_ORIGINAL_COMMAND"`, argument passthrough,
-   writable executable parents, or a symlink to an unapproved executable. Ensure
-   this protocol has no create/start/delete/file/guest-exec capability.
-5. Authorize **only the supplied public controller key** for this probe. The
-   key's authorized_keys prefix is:
+Keep independent observation before, during and after invocation. Record whether
+it launches/relaunches UTM and whether PID/start time/owner/session change. A new,
+restarted or different app session is **proof failure**, even if output looks
+valid. Compare returned inventory with the already active intended GUI instance.
+There remains a check/use race: the process may exit after inspection and CLI may
+auto-launch another. Monitoring detects evidence of that race; it cannot prevent
+it or prove atomic process binding. A supported no-launch/session-bound operation
+is requested upstream. Do not claim zero session effects from a successful probe.
 
-   ```text
-   restrict,command="/usr/local/libexec/eve-utm-probe" ssh-ed25519 <supplied-public-key> <label>
-   ```
+## Administrator preparation
 
-   Verify the installed macOS OpenSSH supports `restrict` and that it prohibits
-   agent/port/X11 forwarding, PTY and user rc execution. If unsupported, stop and
-   review a fully equivalent explicit restriction set before proceeding. Protect
-   authorized_keys from untrusted edits; a forced command is a key-scoped boundary,
-   not a sandbox against a malicious host account owner. No private key is copied
-   to the Mac and no new unrelated key is generated or discovered.
+1. Select and pin a signed UTM build, macOS version and Apple Silicon architecture.
+   Use built-in `codesign --verify --deep --strict` for integrity against the
+   approved absolute app path; independently verify publisher/build trust.
+2. The owner must already be logged in and UTM running in that GUI session.
+   Record whether Remote Login uses that owner or a distinct scoped account.
+   Dedicated non-admin ownership of a dedicated GUI session is preferable if
+   supported; do not assume another account can control a personal owner's UTM.
+3. Enable Remote Login only for the approved account. Keep PAM/TCC intact. Do not
+   grant sudo, broad Full Disk Access, disable TCC, arrange automatic login or hop
+   GUI sessions. Obtain the host's Ed25519 public key and SHA256 pin through an
+   independent trusted channel, not a network key scan. Supply an explicit
+   controller key; do not generate/discover/copy ambient private keys.
+4. Do not install the earlier draft's two-command forced wrapper: it was described
+   incorrectly as read-only and did not establish process continuity. A static
+   forced-command shell/AppleScript artifact is eligible only after session proof
+   and strict-ID source proof, using documented scripting and a fixed allowlist.
+   It must never evaluate arbitrary `SSH_ORIGINAL_COMMAND` or caller scripts.
+   Initial source-audit proof requires an explicitly approved, administrator-
+   supervised session; if it cannot be done within the approved account/key
+   boundary, stop. Do not weaken restrictions merely to obtain a passing probe.
 
-## Controller probe
+## Supervised invocation
 
-Use only explicitly provided values. `CONTROL_KEY_FILE` is a reference supplied
-by the administrator, not a search of controller home files. `KNOWN_HOSTS_FILE`
-must contain the independently verified public key for the exact host/port, with
-0600 permissions; verify its fingerprint against the approved pin first.
+After independent verification, invoke only one inspection command at a time
+using the selected absolute bundled CLI. For an installation explicitly approved
+at `/Applications/UTM.app`, the first command is:
 
-```sh
-ssh -F /dev/null -o BatchMode=yes -o IdentitiesOnly=yes \
-  -o IdentityAgent=none -o AddKeysToAgent=no -o ForwardAgent=no \
-  -o ClearAllForwardings=yes -o RequestTTY=no -o PermitLocalCommand=no \
-  -o StrictHostKeyChecking=yes -o UpdateHostKeys=no \
-  -o HostKeyAlgorithms=ssh-ed25519 \
-  -o GlobalKnownHostsFile=/dev/null \
-  -o UserKnownHostsFile="$KNOWN_HOSTS_FILE" \
-  -o ConnectTimeout=10 -i "$CONTROL_KEY_FILE" -p "$HOST_PORT" \
-  -l "$HOST_ACCOUNT" -- "$HOST_ADDRESS" eve-utm-probe-v1
+```text
+/Applications/UTM.app/Contents/MacOS/utmctl version
 ```
 
-Bound execution externally (for example Python `subprocess.run(..., timeout=30)`
-on the controller). macOS itself need not have Python or a `timeout` executable.
-Save exit code and sanitized stdout/stderr without account names, VM inventory,
-key material or private paths in public artifacts. Inventory can be sensitive.
-On AppleEvents denial or a hang, stop; do not treat an empty table as absence or
-a zero exit code as proof if errors were emitted. Interactive authorization, if
-requested, must be approved by the Mac administrator for the exact caller/UTM
-pair. Record the permission scope and retry without relaxing restrictions.
+Re-verify the same existing process/session independently before a separate
+`/Applications/UTM.app/Contents/MacOS/utmctl list` invocation. Neither command is
+a lifecycle operation, but each may launch/hide the app or trigger authorization.
+Record sanitized errors and exit status; a zero status or empty table is not
+proof if AppleEvents errors occur. Authorization, if prompted, is administrator-
+approved for the exact caller/UTM pair, never an automatic TCC reset or bypass.
 
-## Required proof matrix
+The external controller's eventual SSH invocation must use `-F /dev/null`,
+`BatchMode=yes`, `IdentitiesOnly=yes`, `IdentityAgent=none`, `AddKeysToAgent=no`,
+`ForwardAgent=no`, `ClearAllForwardings=yes`, `RequestTTY=no`,
+`PermitLocalCommand=no`, `StrictHostKeyChecking=yes`, `UpdateHostKeys=no`,
+`HostKeyAlgorithms=ssh-ed25519`, `GlobalKnownHostsFile=/dev/null`, an explicit
+0600 known_hosts file containing the independently pinned public key, and explicit
+key/account/address/port. Bound connect and execution time on the controller.
+The Mac must not need Python, developer tools, a package manager or source checkout.
+Do not log private paths, accounts, inventory or key material in public artifacts.
 
-* Verify version and actual known UUIDs match the same logged-in GUI owner session,
-  including when the SSH account is distinct. No adoption by display name.
-* Reconnect and repeat after UTM restart and after locking/unlocking the owner
-  desktop. Record logout/reboot behavior as unavailable if GUI login is required;
-  do not silently launch a separate app/session.
-* Try an unallowlisted command and ensure rejection occurs before UTM invocation.
-  Confirm forwarding, PTY and arbitrary shell access are unavailable to this key.
-* Confirm wrong host key, wrong controller key and an unauthorized account fail.
-* Test no active owner session and an unavailable app without mutating guests;
-  report unavailable/unknown, never absent. Do not require logged-out operation
-  unless UTM documents support.
+## Proof and negative-test matrix
 
-Pass means repeatable read-only access to the intended session under the actual
-restricted key/account/build. A local Terminal success, user anecdote, permission
-prompt, or fake host test is insufficient. Failure requires reporting exact
-versions, session arrangement, sanitized error and smallest failing command to
-the upstream request. Do not build a daemon or session-hopping workaround.
+* Owner and separate-account results are distinct. Local Terminal success does
+  not prove Remote Login or access to another owner's GUI session.
+* Reconnect and repeat with independently verified process continuity. An
+  administrator may deliberately restart UTM between runs, but each new run must
+  establish the intended pre-existing session afresh. Test lock/unlock separately.
+* If no intended GUI session/process is active, fail the precondition **without
+  invoking utmctl**. Do not run an unavailable-app probe and claim no effects.
+* Future offline boundary tests must reject changed/new process identity,
+  auto-launch/relaunch evidence, ambiguous owner/session, bad pin/key, arbitrary
+  commands, forwarding and PTY requests. They cannot prove macOS feasibility.
+* Any future separately authorized auto-launch experiment must record host/session
+  effects and is not a passing continuity proof. No such experiment is requested
+  or performed here.
+
+Report exact versions, approved session arrangement, sanitized error and smallest
+failing inspection command to upstream draft A. No daemon or session-hopping
+workaround. The source audit does not establish strict scripting ID semantics;
+that is a separate prerequisite before installing any host-control artifact.
 
 ## Cleanup and later live-test gate
 
-Remove the temporary probe authorization/artifact when the proof is finished;
-delete only the files/key entry installed for this proof. Do not remove unrelated
-authorized keys, host keys, templates or UTM configuration. No VM/image/key was
-created by the probe. Do not claim cleanup after unavailable access or SIGKILL.
+No VM, image, key or temporary host artifact is created by this revision. A later
+manual proof must remove only its explicitly installed authorization/artifacts,
+record app launches/relaunches, and leave session restoration to the administrator.
+Do not kill an app to hide effects or claim cleanup after unavailable access or
+SIGKILL. Preserve unrelated keys, processes, templates and configuration.
 
-A provider live test is deferred until both host feasibility and authenticated
-clone recovery are solved. It will require an explicit target, pinned immutable
-prepared template, unique ownership token, bounded cleanup, per-clone guest
-identity, guest SSH command execution, stop/start and delete. It must remain
-opt-in and leave any unconfirmed cleanup identity visible. This document is not
-an implementation or a passing result of that future test.
+A remote live lifecycle test remains deferred until all five feasibility gates
+pass. It requires explicit target, immutable prepared template, unique ownership,
+strict ID-only effects, authenticated per-clone guest SSH, bounded stop/start/delete
+and cleanup with unresolved qualified identity reporting. It remains opt-in.
