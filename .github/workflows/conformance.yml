@@ -54,6 +54,11 @@ jobs:
       - name: Provider environment contracts
         run: python3 tests/test-manifest-env-contract
 
+      - name: Incus offline lifecycle and SSH contract
+        run: |
+          pip install pytest
+          python3 tests/test-incus
+
       - name: Status error propagation
         run: python3 tests/test-provider-status-errors
 

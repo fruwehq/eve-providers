@@ -1,0 +1,172 @@
+#!/usr/bin/env python3
+"""Explicit remote-pool smoke test. Never invoked by normal CI."""
+
+from __future__ import annotations
+
+import argparse
+import importlib.util
+import json
+import re
+import signal
+import sys
+import time
+import uuid
+from pathlib import Path
+
+import yaml
+
+ROOT = Path(__file__).resolve().parents[1] / "incus"
+spec = importlib.util.spec_from_file_location("incus_provider", ROOT / "provider.py")
+assert spec and spec.loader
+provider_module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(provider_module)
+
+
+def main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--live", action="store_true")
+    parser.add_argument("--config", type=Path)
+    parser.add_argument("--prefix")
+    parser.add_argument("--target")
+    args = parser.parse_args(argv)
+    if not args.live:
+        print(
+            "[SKIP] Incus live test requires --live, --config, --prefix, and --target"
+        )
+        return 0
+    if (
+        not args.config
+        or not args.config.is_absolute()
+        or not args.target
+        or not args.prefix
+        or not re.fullmatch(r"eve-it-[a-z0-9]{1,3}", args.prefix)
+    ):
+        parser.error(
+            "explicit absolute config path, target endpoint, and unique eve-it-<1-3 chars> prefix required"
+        )
+    data = yaml.safe_load(args.config.read_text())
+    if (
+        not isinstance(data, dict)
+        or data.get("endpoint") != args.target
+        or args.target != provider_module.DEFAULTS["config"]["endpoint"]
+        or data.get("remote") != "eve-incus-pool"
+        or data.get("project") != "eve-ci"
+    ):
+        parser.error(
+            "live test must explicitly target eve-incus-pool / eve-ci at its configured endpoint"
+        )
+    if not re.fullmatch(r"eve-incus-pool:[0-9a-f]{64}", data.get("image", "")):
+        parser.error(
+            "live test requires an administrator-preloaded image fingerprint, never a downloading alias"
+        )
+    data.update(instance_prefix=args.prefix, run_id=str(uuid.uuid4()))
+    resolved = {
+        "access": {
+            k: "ubuntu" for k in ("bootstrap_user", "human_user", "provision_user")
+        },
+        "bundle_packages": [],
+        "composition": {
+            "name": "smoke",
+            "machine": "incus-ubuntu-ci",
+            "os": "ubuntu-26.04-amd64",
+            "init": "incus-cloud-init",
+            "location": "incus-pool",
+        },
+        "engine": "incus",
+        "init": {"id": "incus-cloud-init"},
+        "instance": {
+            "name": "smoke",
+            "machine": "incus-ubuntu-ci",
+            "os": "ubuntu-26.04-amd64",
+            "init": "incus-cloud-init",
+            "location": "incus-pool",
+        },
+        "location": {"name": "incus-pool"},
+        "machine": {
+            "name": "incus-ubuntu-ci",
+            "provider": "incus",
+            "kind": "container",
+            "defaults": provider_module.DEFAULTS["machine"],
+        },
+        "os": {
+            "id": "ubuntu-26.04-amd64",
+            "family": "ubuntu",
+            "arch": "amd64",
+            "version": "26.04",
+        },
+        "package_plugins": [],
+        "package_sources": {},
+        "provider_config": data,
+        "provider_plugin": "incus",
+        "stack_tags": "incus",
+    }
+    provider = provider_module.Provider(
+        provider_module.configuration(resolved), resolved
+    )
+    image = data["image"].split(":", 1)[1]
+    images = json.loads(
+        provider.call("image", "list", provider.remote + ":", "--format=json")
+    )
+    if not any(row.get("fingerprint") == image for row in images):
+        raise provider_module.IncusError("Preloaded image is not present in eve-ci")
+    if provider.observe() is not None:
+        raise provider_module.IncusError(
+            "Unique test instance already exists; refusing to replace it"
+        )
+    print("Incus live resource:", provider.target, "project=eve-ci", flush=True)
+
+    def wait_for_ssh() -> None:
+        deadline = time.monotonic() + provider_module.DEFAULTS["live"]["ssh_timeout"]
+        while time.monotonic() < deadline:
+            try:
+                if provider.ssh(["--", "test", "$(id -un)", "=", "ubuntu"]) == 0:
+                    return
+            except provider_module.IncusError:
+                pass
+            time.sleep(provider_module.DEFAULTS["live"]["poll_interval"])
+        raise provider_module.IncusError(
+            "Guest SSH did not become reachable before the live deadline"
+        )
+
+    def terminate(_signum, _frame):
+        raise KeyboardInterrupt
+
+    previous = signal.signal(signal.SIGTERM, terminate)
+    try:
+        assert provider.lifecycle("up")["status"] == "running"
+        wait_for_ssh()
+        if (
+            provider.ssh(
+                [
+                    "--",
+                    'cloud-init status --wait && command -v sshd && test "$(id -un)" = ubuntu',
+                ]
+            )
+            != 0
+        ):
+            raise provider_module.IncusError("Guest cloud-init/SSH verification failed")
+        assert provider.lifecycle("stop")["status"] == "stopped"
+        assert provider.lifecycle("start")["status"] == "running"
+        wait_for_ssh()
+        assert provider.lifecycle("down")["status"] == "absent"
+        print("[OK] cloud guest, authenticated SSH, stop/start, and deletion")
+        return 0
+    finally:
+        try:
+            provider.lifecycle("down")
+            if provider.observe() is not None:
+                raise provider_module.IncusError(
+                    "Live instance cleanup did not establish absence"
+                )
+        finally:
+            signal.signal(signal.SIGTERM, previous)
+        # No image import/delete, key generation, client-config mutation, or
+        # registry writes. Per-call known_hosts is removed by Provider.ssh.
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main(sys.argv[1:]))
+    except provider_module.IncusError as error:
+        print(str(error), file=sys.stderr)
+        raise SystemExit(1) from None

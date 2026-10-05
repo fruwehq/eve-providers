@@ -1,0 +1,26 @@
+# Provider-owned defaults. No controller credential paths have defaults.
+bootstrap:
+  package_update: true
+  packages: [openssh-server]
+  port: 22
+  protocol: ssh
+  service: ssh
+  username: ubuntu
+  version: 2
+config:
+  command_timeout: 120
+  endpoint: https://192.168.1.108:8443
+  image: images:ubuntu/26.04/cloud
+  instance_prefix: eve-ci
+  nic: eth0
+  project: eve-ci
+  remote: eve-incus-pool
+  subnet: 10.201.153.0/24
+live:
+  poll_interval: 2
+  ssh_timeout: 300
+machine:
+  cpu_cores: 2
+  memory_mb: 2048
+  network: incusbr0
+  pool: default
