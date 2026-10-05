@@ -53,7 +53,7 @@ manifest. Do not execute export on an existing destination during feasibility.
 | Quiescence | Stopped-at-entry guard exists. No inspected transaction/lease freezes configuration, registry, external files and concurrent GUI/other clients throughout asynchronous copying. |
 | Exact UUID/config association | Export receives a VM object; no returned UUID/config digest/manifest ties exported bytes to a strict-ID live template revision. Static scripting atomicity remains unproven. |
 | All-disk coverage | Recursive copy covers the bundle tree. External/removable files are not shown being gathered by `export`. Supported scripting config and `UTMAppleConfigurationDrive` permit external image URLs; thus all attached disks cannot be assumed contained. Layer/dependency closure also needs a supported manifest. |
-| Deterministic bytes or manifest | No canonical ordering/metadata normalization, hash or supported all-resource manifest is emitted. A user-defined directory hash would define a new private-layout protocol, not prove supported template provenance. |
+| Deterministic bytes or manifest | No canonical ordering/metadata normalization, hash or supported all-resource manifest is emitted. Generic file/tree hashing can identify exported bytes without parsing private formats, but cannot attest omitted resources, a consistent live configuration or later clone provenance. |
 | Race prevention and later clone association | No audited immutable revision/lease prevents changes during export or between digest and clone. A wrapper lock cannot exclude GUI/other clients; repeated matching hashes alone do not close the race. |
 
 External-drive evidence:
